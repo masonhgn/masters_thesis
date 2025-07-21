@@ -1,0 +1,4 @@
+open_spiel
+numpy
+matplotlib
+tqdm
