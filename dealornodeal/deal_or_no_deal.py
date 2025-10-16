@@ -4,10 +4,10 @@ import numpy as np
 
 
 _NUM_PLAYERS = 2
-_MAX_TURNS = 10
-_NUM_ITEM_TYPES = 3
-_NUM_ITEMS_PER_TYPE = 2 #quantities of items
-_MAX_SINGLE_ITEM_VALUE = 10
+_MAX_TURNS = 3
+_NUM_ITEM_TYPES = 2
+_NUM_ITEMS_PER_TYPE = 1 #quantities of items
+_MAX_SINGLE_ITEM_VALUE = 1
 
 
 
@@ -24,7 +24,7 @@ _GAME_TYPE = pyspiel.GameType(
     dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
     chance_mode=pyspiel.GameType.ChanceMode.EXPLICIT_STOCHASTIC,
     information=pyspiel.GameType.Information.IMPERFECT_INFORMATION,
-    utility=pyspiel.GameType.Utility.GENERAL_SUM,
+    utility=pyspiel.GameType.Utility.ZERO_SUM,
     reward_model=pyspiel.GameType.RewardModel.TERMINAL,
     max_num_players=_NUM_PLAYERS,
     min_num_players=_NUM_PLAYERS,
@@ -45,8 +45,8 @@ _GAME_INFO = pyspiel.GameInfo(
     num_distinct_actions = _NUM_DISTINCT_ACTIONS,
     max_chance_outcomes = _MAX_CHANCE_NODE_OUTCOMES,
     num_players = _NUM_PLAYERS,
-    min_utility = 0,
-    max_utility = _MAX_SINGLE_ITEM_VALUE * _NUM_ITEM_TYPES * _NUM_ITEMS_PER_TYPE,
+    min_utility = -_MAX_SINGLE_ITEM_VALUE * _NUM_ITEM_TYPES * _NUM_ITEMS_PER_TYPE,
+    max_utility =  _MAX_SINGLE_ITEM_VALUE * _NUM_ITEM_TYPES * _NUM_ITEMS_PER_TYPE,
     utility_sum = 0.0,
     max_game_length= _MAX_TURNS, #each player acts on alternating timesteps
 )
@@ -103,66 +103,66 @@ class DealOrNoDealState(pyspiel.State):
         self._returns = [0.0 for _ in range(self._num_players)]
 
 
+
+    def __str__(self) -> str:
+        """for internal use by open_spiel"""
+        if self.is_terminal():
+            return "terminal"
+        if self.current_player() == pyspiel.PlayerId.CHANCE:
+            return "chance"
+        return self.information_state_string(self.current_player())
+
+
+
     def current_player(self) -> int:
         if self.is_terminal():
-            return pyspiel.PlayerId.TERMINAL #if game is over
+            return pyspiel.PlayerId.TERMINAL
         if any(u is None for u in self._utilities):
-            return pyspiel.PlayerId.CHANCE # if game hasn't started yet, pick a random player to go first
-        return self._cur_player #game is ongoing, whose turn is it?
+            return pyspiel.PlayerId.CHANCE
+        if self._cur_player == pyspiel.PlayerId.CHANCE:
+            return 0
+        return self._cur_player
     
+
+
 
     def is_terminal(self) -> bool:
         return self._agreement or self._turn >= self._max_turns
 
 
     def returns(self) -> List[float]:
-
-        '''
-        POSSIBLE CONDITIONS:
-
-        1. game is not terminal:
-            return Nonetype
-
-        2. turn limit has been reached:
-            return 0 utility for all players
-
-        3. last proposal was not valid (e.g. player asked for higher quantity of an item than available):
-            return return 0 utility for all players
-
-        4. last proposal was valid:
-            - let the player who made the last proposal be player A
-            - player A final utility = dot product of player A utilities and last proposal (e.g. last_proposal = [2,0,1], utilities = [4,1,3], return 8+0+3 = 11)
-            - player B final utility = dot product of player B utilities and (total allocation vector - last proposal)
-        '''
-
-        #1
-        if not self.is_terminal(): #if we haven't reached an agreement, don't return anything
-            return [0.0 for _ in range(self._num_players)]
-        
-        #2,3
-        #if agreement hasn't been reached and we've run out of turns (which is implied here since self.is_terminal is true but self._agreement is false)
-        #or if there have been no offers
+        """compute returns based on last valid offer"""
+        if not self.is_terminal():
+            return [0.0, 0.0]
         if not self._agreement or len(self._offers) == 0:
-            return [0.0 for _ in range(self._num_players)]
-        
-        last_offer = self._offers[-1]  # e.g. [2,0,1]
+            return [0.0, 0.0]
+
+        last_offer = self._offers[-1]
         total_allocation = [self._items_per_type] * self._num_item_types
 
+        #identify proposer (previous player, since _cur_player switched)
+        proposer = (self._cur_player + 1) % self._num_players
 
-        #4
-        returns = []
-        for pid in range(self._num_players):
-            if pid == self._cur_player:
-                # proposer payoff
-                util = np.dot(self._utilities[pid], last_offer)
-            else:
-                # responder payoff = remainder
-                remainder = [t - o for t, o in zip(total_allocation, last_offer)]
-                util = np.dot(self._utilities[pid], remainder)
-            returns.append(float(util))
+        #each player's subjective utility of the deal
+        offer_util_p0 = np.dot(self._utilities[0], last_offer)
+        remainder_util_p0 = np.dot(self._utilities[0],
+                                [t - o for t, o in zip(total_allocation, last_offer)])
+        offer_util_p1 = np.dot(self._utilities[1], last_offer)
+        remainder_util_p1 = np.dot(self._utilities[1],
+                                [t - o for t, o in zip(total_allocation, last_offer)])
 
-        return returns
-    
+        #values for proposer and responder
+        value_p0 = offer_util_p0 if proposer == 0 else remainder_util_p0
+        value_p1 = offer_util_p1 if proposer == 1 else remainder_util_p1
+
+        #convert to zero-sum: relative advantage
+        diff = value_p0 - value_p1
+
+        #normalization to keep within declared range
+        max_abs = _MAX_SINGLE_ITEM_VALUE * self._num_item_types * self._items_per_type
+        diff = np.clip(diff, -max_abs, max_abs)
+
+        return [float(diff), float(-diff)]
 
 
 
@@ -171,27 +171,26 @@ class DealOrNoDealState(pyspiel.State):
 
     def _apply_action(self, action: int) -> None:
         if self.current_player() == pyspiel.PlayerId.CHANCE:
-            #if we are still assigning utilities, then get the next player with no utility, and assign utility vector
             next_pid = [i for i, u in enumerate(self._utilities) if u is None][0]
-
-
-            #print(action)
             self._utilities[next_pid] = self._decode_utility_action(action)
-            # If still another player missing utilities, stay in chance
             if any(u is None for u in self._utilities):
                 self._cur_player = pyspiel.PlayerId.CHANCE
             else:
-                self._cur_player = 0  # first player starts
+                #non deterministic behavior breaks EFR
+                #self._cur_player = np.random.choice([0, 1]) #choose random player to start
+
+                self._cur_player = 0
             return
 
-        #have we reached an agreement?
+        #have we reached an agreement? 
         if action == self._accept_action_id():
             self._agreement = True
+            # don't increment turn here!!!!!
         else:
             offer = self._decode_offer_action(action)
             self._offers.append(offer)
-            self._cur_player = 1 - self._cur_player  # alternate turn
-        self._turn += 1
+            self._cur_player = 1 - self._cur_player
+            self._turn += 1
 
 
 
@@ -412,6 +411,196 @@ class DealOrNoDealGame(pyspiel.Game):
     def _generate_allocations(self) -> None:
         '''generate starting allocations for both players'''
         pass
+
+
+    def make_py_observer(self, iig_obs_type=None, params=None):
+        """Returns an observer for this game (OpenSpiel compatibility)."""
+        return DealOrNoDealObserver(
+            iig_obs_type or pyspiel.IIGObservationType(perfect_recall=False),
+            params
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+class DealOrNoDealObserver:
+    """
+    this class is an "observer" that open_spiel expects any imperfect-information game to provide.
+    its job is to give a consistent view of the game state from a given player's perspective,
+    both as a human-readable string and as a numerical vector (tensor).
+
+    in open_spiel, algorithms like CFR, EFR, or NashConv don't interact directly with your
+    DealOrNoDealState internals. instead, they ask the game for an observer object and use it
+    to extract what a given player can "see" at each point in the game.
+
+    so this class serves as the adapter layer between your custom state representation and
+    the standard open_spiel observation API.
+    """
+
+    def __init__(self, iig_obs_type, params):
+        """
+        constructor for the observer. called by your game's make_py_observer() method.
+
+        iig_obs_type:  an object describing what kind of information this observer should include.
+                       open_spiel passes this automatically when it needs to build an observer.
+                       for example, it may specify whether perfect recall or private/public info
+                       should be tracked.
+
+        params: optional additional configuration. we don't need any, so we just raise an error
+                if someone tries to pass them in.
+        """
+        if params:
+            raise ValueError(f"observation parameters not supported; got {params}")
+
+        # store what kind of info we should include in this observation
+        # these flags will control what data we encode later.
+        self.perfect_recall = iig_obs_type.perfect_recall
+        self.include_private = (
+            iig_obs_type.private_info == pyspiel.PrivateInfoType.SINGLE_PLAYER
+        )
+        self.include_public = iig_obs_type.public_info
+
+        # we now define what pieces of data will make up our observation.
+        # each entry in "pieces" is a tuple of (name, number_of_elements, shape).
+        # these will later be concatenated into a single flat tensor.
+        pieces = []
+
+        # 1. always include which player's perspective this observation is from.
+        #    this is encoded as a one-hot vector, e.g. [1,0] for player 0 and [0,1] for player 1.
+        pieces.append(("player", 2, (2,)))
+
+        # 2. include private information (the player’s internal utility vector)
+        #    only if the observer is configured to include private info.
+        #    this is relevant because in imperfect-information games, only each player
+        #    knows their own utility structure, not the opponent's.
+        if self.include_private:
+            # here we assume 2 item types. later you could generalize by passing
+            # game.num_item_types instead.
+            pieces.append(("utilities", 2, (2,)))
+
+        # 3. include public information visible to both players.
+        #    this includes the most recent offer, the current turn number,
+        #    and whether an agreement has been reached.
+        if self.include_public:
+            pieces.append(("last_offer", 2, (2,)))
+            pieces.append(("turn", 1, (1,)))
+            pieces.append(("agreement", 1, (1,)))
+
+        # compute total number of elements in the flattened observation tensor
+        total_size = sum(size for _, size, _ in pieces)
+
+        # create one flat tensor to hold all components.
+        # open_spiel expects observers to expose a 1D float32 vector of fixed length.
+        self.tensor = np.zeros(total_size, np.float32)
+
+        # now build a dictionary of named views into this flat tensor.
+        # this lets us conveniently access each piece by name (e.g. self.dict["turn"])
+        # while keeping the flat layout that open_spiel expects.
+        self.dict = {}
+        idx = 0
+        for name, size, shape in pieces:
+            self.dict[name] = self.tensor[idx:idx + size].reshape(shape)
+            idx += size
+
+    def set_from(self, state, player):
+        """
+        this method updates the internal tensor representation to reflect
+        what the given player sees in the provided game state.
+
+        this is called by open_spiel whenever it needs to get a new observation
+        (for example, when traversing the game tree or computing exploitability).
+
+        inputs:
+            state: a DealOrNoDealState instance (the full game state)
+            player: the integer id (0 or 1) of the player whose perspective we’re encoding
+
+        the output of this function is stored internally in self.tensor and self.dict.
+        nothing is returned — other methods will later access these updated values.
+        """
+        # first, reset the tensor to zeros so we can write fresh data
+        self.tensor.fill(0)
+
+        # one-hot encode which player this observation belongs to
+        self.dict["player"][player] = 1.0
+
+        # if private info is included and the player already has a defined utility vector,
+        # store that in the utilities part of the tensor.
+        # this represents the player's "private knowledge" — their internal utility weights.
+        if self.include_private and state._utilities[player] is not None:
+            util_vec = np.array(state._utilities[player], dtype=np.float32)
+            self.dict["utilities"][:len(util_vec)] = util_vec
+
+        # now we encode public information, which both players can see.
+        if self.include_public:
+            # if there have been any offers, take the most recent one.
+            if len(state._offers) > 0:
+                last_offer = np.array(state._offers[-1], dtype=np.float32)
+            else:
+                # otherwise fill with zeros (no offers yet)
+                last_offer = np.zeros(len(state._pool), dtype=np.float32)
+            self.dict["last_offer"][:len(last_offer)] = last_offer
+
+            # normalize the turn count to a 0–1 range, so it’s numerically stable
+            self.dict["turn"][0] = state._turn / state._max_turns
+
+            # binary indicator of whether an agreement has been reached
+            self.dict["agreement"][0] = 1.0 if state._agreement else 0.0
+
+    def string_from(self, state, player):
+        """
+        produces a human-readable string version of what this player observes.
+        open_spiel uses this for debugging and also to form unique keys
+        in information-state mappings.
+
+        this string should contain exactly the information that distinguishes
+        one information set from another, but no more.
+        """
+        parts = [f"P{player}"]  # always note which player's perspective this is
+
+        if self.include_private:
+            # show the player's private utility vector if present
+            parts.append(f"util={state._utilities[player]}")
+
+        if self.include_public:
+            # show last offer, current turn, and agreement status
+            last_offer = state._offers[-1] if state._offers else [0] * len(state._pool)
+            parts.append(
+                f"offer={last_offer}, turn={state._turn}, agree={state._agreement}"
+            )
+
+        # join all parts with a separator
+        return " | ".join(parts)
+
+    def tensor_from(self, state, player):
+        """
+        this is the numerical counterpart of string_from().
+        it returns a numpy vector encoding the same information numerically.
+
+        open_spiel’s algorithms call this when they want the tensor version
+        of the information state (e.g. for neural policy approximators).
+
+        internally, it just calls set_from() to update self.tensor,
+        and then returns a copy of that tensor as a numpy array.
+        """
+        # update the tensor with the current state information
+        self.set_from(state, player)
+        # return a copy so outside code doesn't accidentally mutate internal data
+        return np.array(self.tensor, copy=True)
+
+
+
+
+
+
+
 
 
 

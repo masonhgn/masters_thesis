@@ -1,31 +1,12 @@
-# Deal or No Deal (DoNoD) Implementation Checklist for OpenSpiel
+1. Start with a utility range that is way smaller than 1.7M
 
-## Phase 1 – Skeleton
+range is now 729?
+2. Make zero sum
+3. Get convergence of CFR and EFR (tips or causal)
+4. Check the utilities (higher on cfr than tips)? 
 
-- [X] Define `_GAME_TYPE` and `_GAME_INFO` (see `liars_poker.py`).
-- [ ] Implement `DealOrNoDealGame(pyspiel.Game)` with `new_initial_state()`.
-- [ ] Implement `DealOrNoDealState(pyspiel.State)`:
-  - Track players, utilities, pool, offers, agreement status.
 
-## Phase 2 – String State
+- Convergence should be measured in exploitability for zero sum case, and regret measure for general sum
+- Understand difference between causal, blind and tips regret
 
-- [ ] Implement `current_player()`, `is_terminal()`, `returns()`.
-- [ ] Implement `_apply_action()` and `_legal_actions()`.
-- [ ] Implement `information_state_string()` and `observation_string()`.
-- [ ] Debug by playing small games manually.
 
-## Phase 3 – CFR Compatibility
-
-- [ ] Add `information_state_tensor()` and `observation_tensor()`.
-- [ ] Decide encoding scheme:
-  - Pool: cumulative one-hot over items.
-  - Utilities: cumulative encoding (like bargaining).
-  - Offers: either just last offer (simpler) or full sequence.
-- [ ] Add `max_game_length`, `num_distinct_actions`, etc. to `_GAME_INFO`.
-
-## Phase 4 – Testing
-
-- [ ] Run random playthroughs.
-- [ ] Run CFR with strings (sanity check).
-- [ ] Run CFR with tensors (scalability check).
-- [ ] Compare with paper’s expected negotiation outcomes.
