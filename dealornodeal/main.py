@@ -20,7 +20,7 @@ def compute_exploitability(game, policy):
 
 
 def play_once(game, policy):
-    """Run one self-play episode with a given policy."""
+    """one one self play iteration with a specific policy"""
     state = game.new_initial_state()
     while not state.is_terminal():
         cur_player = state.current_player()
@@ -42,7 +42,7 @@ def play_once(game, policy):
 #cfr
 
 def run_cfr(num_iterations=500):
-    print("=== CFR Exploitability Convergence ===")
+    print("RUNNING CFR")
     game = pyspiel.load_game("python_deal_or_no_deal")
     solver = cfr.CFRSolver(game)
 
@@ -58,63 +58,71 @@ def run_cfr(num_iterations=500):
             exploitabilities.append(expl)
             print(f"Iter {i+1:>4}: Exploitability = {expl:.6f}")
 
-    # --- Plot exploitability curve ---
+    #plot exploitability
     plt.figure(figsize=(8, 5))
     plt.plot(
         np.arange(eval_every, num_iterations + 1, eval_every),
         exploitabilities,
-        marker="o"
+        marker="."
     )
     plt.title("CFR Convergence: Exploitability (NashConv)")
     plt.xlabel("Iteration")
     plt.ylabel("Exploitability")
-    plt.yscale("log")  # log scale shows exponential decay nicely
-    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.yscale("log")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.3)
     plt.tight_layout()
+    plt.savefig(f'cfr_{num_iterations}_itr_latest.png')
     plt.show()
 
 
 
 #efr
 
-def run_efr(num_iterations: int = 1000):
-    print("=== EFR Test Run ===")
+def run_efr(num_iterations: int = 1000, deviation: str = "tips"):
+    print("RUNNING EFR")
     game = pyspiel.load_game("python_deal_or_no_deal")
-    print("Game loaded:", game.get_type().long_name)
+    solver = efr.EFRSolver(game, deviations_name=deviation)
 
-    solver = efr.EFRSolver(game, deviations_name="blind cf")
-    print("Solver initialized.")
-
-    nash_convs = []
+    exploitabilities = []
     eval_every = 10
 
     for i in range(num_iterations):
         solver.evaluate_and_update_policy()
-        avg_policy = solver.average_policy()
 
         if (i + 1) % eval_every == 0:
-            nash_conv = compute_nash_conv(game, avg_policy)
-            nash_convs.append(nash_conv)
-            print(f"Iteration {i+1:>4}: NashConv = {nash_conv:.4f}")
+            avg_policy = solver.average_policy()
+            expl = compute_exploitability(game, avg_policy)
+            exploitabilities.append(expl)
+            print(f"Iter {i+1:>4}: Exploitability = {expl:.6f}")
 
-
+    #plot exploitability
     plt.figure(figsize=(8, 5))
-    plt.plot(np.arange(eval_every, num_iterations + 1, eval_every), nash_convs, marker='o')
-    plt.title("EFR Convergence on Deal or No Deal")
+    plt.plot(
+        np.arange(eval_every, num_iterations + 1, eval_every),
+        exploitabilities,
+        marker=".",
+        color = "red"
+    )
+    plt.title(f"EFR Convergence: Exploitability (NashConv) deviation = {deviation}")
     plt.xlabel("Iteration")
-    plt.ylabel("Exploitability (NashConv)")
-    plt.grid(True)
+    plt.ylabel("Exploitability")
+    plt.yscale("log")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.3)
     plt.tight_layout()
+    deviation = ''.join([c if c != ' ' else '_' for c in list(deviation)])
+    plt.savefig(f'efr_{num_iterations}_itr_{deviation}_latest.png')
     plt.show()
 
+    #confirm zero sum
     print("\nTraining finished!")
-    print(f"Final NashConv = {nash_convs[-1]:.4f}")
+    print(f"Final Exploitability = {exploitabilities[-1]:.6f}")
     returns = np.mean([play_once(game, solver.average_policy()) for _ in range(20)], axis=0)
     print("  Mean self-play returns:", returns)
-    print("  Sum check (should be ~0):", np.sum(returns))
+    print("  Sum check (should be around 0):", np.sum(returns))
+
 
 
 np.random.seed(0)
 
-run_cfr(num_iterations=500)
+run_efr(num_iterations=500, deviation='csps')
 # run_efr(num_iterations=1000)

@@ -555,29 +555,10 @@ class DealOrNoDealObserver:
             self.dict["agreement"][0] = 1.0 if state._agreement else 0.0
 
     def string_from(self, state, player):
-        """
-        produces a human-readable string version of what this player observes.
-        open_spiel uses this for debugging and also to form unique keys
-        in information-state mappings.
+        """Return exactly the same information state string used by the game."""
+        return state.information_state_string(player)
 
-        this string should contain exactly the information that distinguishes
-        one information set from another, but no more.
-        """
-        parts = [f"P{player}"]  # always note which player's perspective this is
 
-        if self.include_private:
-            # show the player's private utility vector if present
-            parts.append(f"util={state._utilities[player]}")
-
-        if self.include_public:
-            # show last offer, current turn, and agreement status
-            last_offer = state._offers[-1] if state._offers else [0] * len(state._pool)
-            parts.append(
-                f"offer={last_offer}, turn={state._turn}, agree={state._agreement}"
-            )
-
-        # join all parts with a separator
-        return " | ".join(parts)
 
     def tensor_from(self, state, player):
         """
