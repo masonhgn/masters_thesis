@@ -124,5 +124,179 @@ def run_efr(num_iterations: int = 1000, deviation: str = "tips"):
 
 np.random.seed(0)
 
-run_efr(num_iterations=500, deviation='csps')
-# run_efr(num_iterations=1000)
+# run_efr(num_iterations=500, deviation='csps')
+# # run_efr(num_iterations=1000)
+
+
+
+
+
+
+
+
+def run_cfr_regret(num_iterations=500):
+    print("RUNNING CFR (tracking regret)")
+    game = pyspiel.load_game("python_deal_or_no_deal")
+    solver = cfr.CFRSolver(game)
+
+    avg_regrets = []
+    eval_every = 10
+
+    for i in range(num_iterations):
+        solver.evaluate_and_update_policy()
+        if (i + 1) % eval_every == 0:
+            # get total regret from all infosets
+            total_regret = 0.0
+            num_infosets = 0
+            for info_state in solver._info_state_nodes.values():
+                regrets = info_state.cumulative_regret.values()
+                print(regrets)
+                print(sum(regrets))
+
+                total_regret += sum(r for r in regrets)
+                num_infosets += 1
+            avg_regret = total_regret / max(num_infosets, 1)
+            avg_regrets.append(avg_regret)
+            print(f"Iter {i+1:>4}: Avg regret = {avg_regret:.6f}")
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(np.arange(eval_every, num_iterations + 1, eval_every), avg_regrets, marker='.')
+    plt.title("CFR Convergence: Average Regret")
+    plt.xlabel("Iteration")
+    plt.ylabel("Average Regret")
+    plt.yscale("log")
+    plt.grid(True, linestyle='--', linewidth=0.3)
+    plt.tight_layout()
+    plt.savefig("cfr_regret.png")
+    plt.show()
+
+    return solver
+
+
+def run_efr_regret(num_iterations=500, deviation="csps"):
+    print("RUNNING EFR (tracking regret)")
+    game = pyspiel.load_game("python_deal_or_no_deal")
+    solver = efr.EFRSolver(game, deviations_name=deviation)
+
+    avg_regrets = []
+    eval_every = 10
+
+    for i in range(num_iterations):
+        solver.evaluate_and_update_policy()
+        if (i + 1) % eval_every == 0:
+            total_regret = 0.0
+            num_infosets = 0
+            for info_state in solver._info_states.values():
+                total_regret += np.sum(np.maximum(info_state.cumulative_regrets, 0))
+                num_infosets += 1
+            avg_regret = total_regret / max(num_infosets, 1)
+            avg_regrets.append(avg_regret)
+            print(f"Iter {i+1:>4}: Avg regret = {avg_regret:.6f}")
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(np.arange(eval_every, num_iterations + 1, eval_every),
+             avg_regrets, marker='.', color='red')
+    plt.title(f"EFR Convergence: Average Regret ({deviation})")
+    plt.xlabel("Iteration")
+    plt.ylabel("Average Regret")
+    plt.yscale("log")
+    plt.grid(True, linestyle='--', linewidth=0.3)
+    plt.tight_layout()
+    plt.savefig("efr_regret.png")
+    plt.show()
+
+    return solver
+
+
+
+
+
+
+
+
+
+
+from open_spiel.python.algorithms import outcome_sampling_mccfr as mccfr
+
+def run_mccfr(num_iterations=5000):
+    print("RUNNING MCCFR")
+    game = pyspiel.load_game("python_deal_or_no_deal")
+    solver = mccfr.OutcomeSamplingSolver(game)
+    
+    regrets = []
+    eval_every = 100
+    
+    for i in range(num_iterations):
+        solver.run_iteration()
+        if (i + 1) % eval_every == 0:
+            avg_policy = solver.average_policy()
+            total_regret = solver.average_regret()
+            regrets.append(total_regret)
+            print(f"Iter {i+1}: Avg Regret = {total_regret:.6f}")
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(np.arange(eval_every, num_iterations + 1, eval_every), regrets, marker='.')
+    plt.title("MCCFR (Outcome Sampling) Average Regret")
+    plt.xlabel("Iteration")
+    plt.ylabel("Average Regret")
+    plt.yscale("log")
+    plt.grid(True, linestyle='--', linewidth=0.3)
+    plt.tight_layout()
+    plt.savefig("mccfr_regret.png")
+    plt.show()
+
+    return solver
+
+
+
+
+
+
+def print_policy_summary(game, policy, num_samples=10):
+    print("\n=== Policy Summary ===")
+    infos = list(policy.state_lookup.keys())
+    np.random.shuffle(infos)
+    for info_state in infos[:num_samples]:
+        actions = list(range(policy.action_probability_array.shape[1]))
+        probs = policy.action_probability_array[policy.state_lookup[info_state]]
+        top_actions = [(a, p) for a, p in zip(actions, probs) if p > 0.01]
+        print(f"{info_state}\n  " + ", ".join([f"a{a}: {p:.2f}" for a, p in top_actions]))
+    print("======================\n")
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    np.random.seed(0)
+    run_cfr_regret()
+
+    # # CFR
+    # cfr_solver = run_cfr_regret(num_iterations=500)
+    # print_policy_summary(pyspiel.load_game("python_deal_or_no_deal"), cfr_solver.average_policy())
+
+    # # EFR
+    # efr_solver = run_efr_regret(num_iterations=500, deviation="csps")
+    # print_policy_summary(pyspiel.load_game("python_deal_or_no_deal"), efr_solver.average_policy())
+
+    # # MCCFR
+    # mccfr_solver = run_mccfr(num_iterations=2000)
+    # print_policy_summary(pyspiel.load_game("python_deal_or_no_deal"), mccfr_solver.average_policy())
+
+
+
+
+    # import pyspiel
+    # import numpy as np
+    # game = pyspiel.load_game("python_deal_or_no_deal")
+
+    # state = game.new_initial_state()
+    # while not state.is_terminal():
+    #     actions = state.legal_actions()
+    #     action = np.random.choice(actions)
+    #     state.apply_action(action)
+    # print("Terminal returns:", state.returns())

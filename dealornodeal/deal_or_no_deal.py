@@ -80,6 +80,7 @@ class DealOrNoDealState(pyspiel.State):
 
         #params
         self._num_players = game.num_players()
+        #self._max_turns = np.random.randint(1, game.max_turns+1)
         self._max_turns = game.max_turns
         self._num_item_types = game.num_item_types
         self._items_per_type = game.items_per_type
@@ -136,6 +137,7 @@ class DealOrNoDealState(pyspiel.State):
             return [0.0, 0.0]
         if not self._agreement or len(self._offers) == 0:
             return [0.0, 0.0]
+            #return [np.random.uniform(-1, 1), np.random.uniform(-1, 1)]
 
         last_offer = self._offers[-1]
         total_allocation = [self._items_per_type] * self._num_item_types
@@ -203,7 +205,8 @@ class DealOrNoDealState(pyspiel.State):
             return [self._encode_utility_action(v) for v in self._all_utility_vectors()]
 
         actions = []
-        actions.append(self._accept_action_id()) #player could accept
+        if len(self._offers) > 0:
+            actions.append(self._accept_action_id()) #player could accept but only if there's an offer on the table
 
         #or player could make any of these offers
         actions.extend([self._encode_offer_action(offer) for offer in self._all_offers()])
