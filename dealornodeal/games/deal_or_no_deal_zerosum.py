@@ -4,10 +4,10 @@ import numpy as np
 
 
 _NUM_PLAYERS = 2
-_MAX_TURNS = 3
-_NUM_ITEM_TYPES = 2
-_NUM_ITEMS_PER_TYPE = 1 #quantities of items
-_MAX_SINGLE_ITEM_VALUE = 1
+_MAX_TURNS = 10
+_NUM_ITEM_TYPES = 3
+_NUM_ITEMS_PER_TYPE = 2 #quantities of items
+_MAX_SINGLE_ITEM_VALUE = 10
 
 
 
@@ -19,8 +19,8 @@ _MAX_CHANCE_NODE_OUTCOMES = (_MAX_SINGLE_ITEM_VALUE + 1) ** _NUM_ITEM_TYPES
 
 
 _GAME_TYPE = pyspiel.GameType(
-    short_name="python_deal_or_no_deal",
-    long_name="Python Deal or No Deal Negotiation",
+    short_name="python_deal_or_no_deal_zerosum",
+    long_name="Python Deal or No Deal Negotiation (ZERO SUM)",
     dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
     chance_mode=pyspiel.GameType.ChanceMode.EXPLICIT_STOCHASTIC,
     information=pyspiel.GameType.Information.IMPERFECT_INFORMATION,
@@ -72,7 +72,7 @@ To start: A DealOrNoDealState is instantiated once, and then as the game progres
 '''
 
 
-class DealOrNoDealState(pyspiel.State):
+class DealOrNoDealZeroSumState(pyspiel.State):
     '''state for deal or no deal game'''
 
     def __init__(self, game) -> None:
@@ -135,7 +135,9 @@ class DealOrNoDealState(pyspiel.State):
         """compute returns based on last valid offer"""
         if not self.is_terminal():
             return [0.0, 0.0]
-        if not self._agreement or len(self._offers) == 0:
+        if not self._agreement:
+            return [-0.1, -0.1]
+        if len(self._offers) == 0:
             return [0.0, 0.0]
             #return [np.random.uniform(-1, 1), np.random.uniform(-1, 1)]
 
@@ -395,7 +397,7 @@ class DealOrNoDealState(pyspiel.State):
 ##### 2 DEFINE GAME
 
 
-class DealOrNoDealGame(pyspiel.Game):
+class DealOrNoDealZeroSumGame(pyspiel.Game):
     '''deal or no deal'''
 
     def __init__(self, params = None) -> None:
@@ -406,8 +408,8 @@ class DealOrNoDealGame(pyspiel.Game):
         self.items_per_type = int(game_parameters.get("items_per_type", _NUM_ITEMS_PER_TYPE))
         self.utility_max = int(game_parameters.get("utility_max", _MAX_SINGLE_ITEM_VALUE))
 
-    def new_initial_state(self) -> DealOrNoDealState:
-        return DealOrNoDealState(self)
+    def new_initial_state(self) -> DealOrNoDealZeroSumState:
+        return DealOrNoDealZeroSumState(self)
 
 
 
@@ -418,7 +420,7 @@ class DealOrNoDealGame(pyspiel.Game):
 
     def make_py_observer(self, iig_obs_type=None, params=None):
         """Returns an observer for this game (OpenSpiel compatibility)."""
-        return DealOrNoDealObserver(
+        return DealOrNoDealZeroSumObserver(
             iig_obs_type or pyspiel.IIGObservationType(perfect_recall=False),
             params
         )
@@ -434,7 +436,7 @@ class DealOrNoDealGame(pyspiel.Game):
 
 
 
-class DealOrNoDealObserver:
+class DealOrNoDealZeroSumObserver:
     """
     this class is an "observer" that open_spiel expects any imperfect-information game to provide.
     its job is to give a consistent view of the game state from a given player's perspective,
@@ -589,4 +591,4 @@ class DealOrNoDealObserver:
 
 
 
-pyspiel.register_game(_GAME_TYPE, DealOrNoDealGame)
+pyspiel.register_game(_GAME_TYPE, DealOrNoDealZeroSumGame)

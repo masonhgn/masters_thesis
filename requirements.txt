@@ -1,3 +1,4 @@
 open_spiel
 numpy
 matplotlib
+ipykernel
