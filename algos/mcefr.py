@@ -150,39 +150,28 @@ class MCEFRSolver(object):
     # Store information state nodes (created lazily during sampling)
     self._info_state_nodes = {}
 
-    # Initialize root structure for generating deviations
-    hist = {player: [] for player in range(self._num_players)}
-    empty_path_indices = [[] for _ in range(self._num_players)]
-    self._initialize_info_state_nodes(self._root_node, hist, empty_path_indices)
-
     self._iteration = 1  # For possible linear-averaging
 
-  def _initialize_info_state_nodes(self, state, history, path_indices):
-    """Initializes info_state_nodes.
+  def _get_or_create_info_state_node(self, state, history, path_indices):
+    """Lazily creates an info state node if it doesn't exist.
 
-    Create one _InfoStateNode per infoset. This is similar to EFR's initialization
-    but adapted for lazy creation during Monte Carlo sampling.
+    This is called during sampling to create nodes on-the-fly rather than
+    pre-initializing the entire tree.
 
     Args:
-      state: The current state in the tree traversal.
+      state: The current state.
       history: an array of the preceding actions taken prior to the state
         for each player.
       path_indices: a 3d array [player number]x[preceding state]x[legal actions
         for state, index of the policy for this state in TabularPolicy].
+
+    Returns:
+      The info state node for this state.
     """
-    if state.is_terminal():
-      return
-
-    if state.is_chance_node():
-      for action, unused_action_prob in state.chance_outcomes():
-        self._initialize_info_state_nodes(
-            state.child(action), history, path_indices
-        )
-      return
-
     current_player = state.current_player()
     info_state = state.information_state_string(current_player)
     info_state_node = self._info_state_nodes.get(info_state)
+
     if info_state_node is None:
       legal_actions = state.legal_actions(current_player)
       info_state_node = _InfoStateNode(
@@ -206,67 +195,7 @@ class MCEFRSolver(object):
       )
       self._info_state_nodes[info_state] = info_state_node
 
-    legal_actions = state.legal_actions(current_player)
-
-    for action in info_state_node.legal_actions:
-      new_path_indices = copy.deepcopy(path_indices)
-      new_path_indices[current_player].append(
-          [legal_actions, info_state_node.index_in_tabular_policy]
-      )
-      new_history = copy.deepcopy(history)
-      new_history[current_player].append(action)
-      assert len(new_history[current_player]) == len(
-          new_path_indices[current_player]
-      )
-
-      self._initialize_info_state_nodes(
-          state.child(action), new_history, new_path_indices
-      )
-
-  def _update_current_policy(self, state, current_policy):
-    """Updated the current policy.
-
-    Updated in order so that memory reach probs are defined wrt to the new
-    strategy. This is similar to EFR's policy update.
-
-    Args:
-      state: the state of which to update the strategy.
-      current_policy: the (t+1)th strategy that is being recursively computed.
-    """
-
-    if state.is_terminal():
-      return
-    elif not state.is_chance_node():
-      current_player = state.current_player()
-      info_state = state.information_state_string(current_player)
-      info_state_node = self._info_state_nodes[info_state]
-      deviations = info_state_node.relizable_deviations
-      for devation in range(len(deviations)):
-        mem_reach_probs = create_probs_from_index(
-            info_state_node.current_history_probs, current_policy
-        )
-        deviation_reach_prob = deviations[
-            devation
-        ].player_deviation_reach_probability(mem_reach_probs)
-        y_increment = (
-            max(0, info_state_node.cumulative_regret[devation])
-            * deviation_reach_prob
-        )
-        info_state_node.y_values[deviations[devation]] = (
-            info_state_node.y_values[deviations[devation]] + y_increment
-        )
-
-      state_policy = current_policy.policy_for_key(info_state)
-      for action, value in self._regret_matching(info_state_node).items():
-        state_policy[action] = value
-
-      for action in info_state_node.legal_actions:
-        new_state = state.child(action)
-        self._update_current_policy(new_state, current_policy)
-    else:
-      for action, _ in state.chance_outcomes():
-        new_state = state.child(action)
-        self._update_current_policy(new_state, current_policy)
+    return info_state_node
 
   def _regret_matching(self, info_set_node):
     """Returns an info state policy using regret matching.
@@ -349,7 +278,7 @@ class MCEFRSolver(object):
     probs = probs / probs.sum()
     return rng.choice(actions, p=probs)
 
-  def _outcome_sampling(self, state, player, reach_probs, sample_probs, rng):
+  def _outcome_sampling(self, state, player, reach_probs, sample_probs, history, path_indices, rng):
     """Runs outcome sampling MCEFR.
 
     Args:
@@ -357,6 +286,8 @@ class MCEFRSolver(object):
       player: the player for which to compute regrets (update player).
       reach_probs: reach probabilities for each player [p0, p1, ..., chance].
       sample_probs: sampling probabilities along the trajectory.
+      history: dict mapping player to list of actions taken so far.
+      path_indices: tracking path for deviation calculations.
       rng: random number generator.
 
     Returns:
@@ -373,12 +304,14 @@ class MCEFRSolver(object):
       new_reach_probs[-1] *= prob
       new_sample_probs = sample_probs * prob
       return self._outcome_sampling(
-          new_state, player, new_reach_probs, new_sample_probs, rng
+          new_state, player, new_reach_probs, new_sample_probs, history, path_indices, rng
       )
 
     current_player = state.current_player()
+
+    # Lazily create info state node
+    info_state_node = self._get_or_create_info_state_node(state, history, path_indices)
     info_state = state.information_state_string(current_player)
-    info_state_node = self._info_state_nodes[info_state]
     legal_actions = state.legal_actions()
 
     # Get current policy for this information state
@@ -394,6 +327,14 @@ class MCEFRSolver(object):
     reach_prob = reach_probs[current_player]
     info_state_node.cumulative_policy[sampled_action] += reach_prob
 
+    # Update history and path_indices for the child
+    new_history = copy.deepcopy(history)
+    new_history[current_player].append(sampled_action)
+    new_path_indices = copy.deepcopy(path_indices)
+    new_path_indices[current_player].append(
+        [legal_actions, info_state_node.index_in_tabular_policy]
+    )
+
     # Recurse with sampled action
     new_state = state.child(sampled_action)
     new_reach_probs = reach_probs.copy()
@@ -401,7 +342,7 @@ class MCEFRSolver(object):
     new_sample_probs = sample_probs * action_prob
 
     sampled_value = self._outcome_sampling(
-        new_state, player, new_reach_probs, new_sample_probs, rng
+        new_state, player, new_reach_probs, new_sample_probs, new_history, new_path_indices, rng
     )
 
     # Update regrets only if this is the update player's information state
@@ -466,12 +407,33 @@ class MCEFRSolver(object):
     for player in range(self._num_players):
       reach_probs = np.ones(self._num_players + 1)
       sample_probs = 1.0
+      history = {p: [] for p in range(self._num_players)}
+      path_indices = [[] for _ in range(self._num_players)]
       self._outcome_sampling(
-          self._root_node.clone(), player, reach_probs, sample_probs, rng
+          self._root_node.clone(), player, reach_probs, sample_probs, history, path_indices, rng
       )
 
-    # Update current policy based on new regrets
-    self._update_current_policy(self._root_node, self._current_policy)
+    # Update current policy based on new regrets (only for visited nodes)
+    for info_state in self._info_state_nodes:
+      info_state_node = self._info_state_nodes[info_state]
+
+      # Update y_values from cumulative regrets
+      deviations = info_state_node.relizable_deviations
+      for deviation_idx in range(len(deviations)):
+        mem_reach_probs = create_probs_from_index(
+            info_state_node.current_history_probs, self._current_policy
+        )
+        deviation_reach_prob = deviations[deviation_idx].player_deviation_reach_probability(mem_reach_probs)
+        y_increment = max(0, info_state_node.cumulative_regret[deviation_idx]) * deviation_reach_prob
+        info_state_node.y_values[deviations[deviation_idx]] = (
+            info_state_node.y_values.get(deviations[deviation_idx], 0) + y_increment
+        )
+
+      # Apply regret matching to get new strategy
+      state_policy = self._current_policy.policy_for_key(info_state)
+      for action, value in self._regret_matching(info_state_node).items():
+        state_policy[action] = value
+
     self._iteration += 1
 
   def current_policy(self):
