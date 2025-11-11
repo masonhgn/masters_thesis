@@ -169,7 +169,7 @@ def run_efr(game_name: str, num_iterations: int = 500, deviation: str = "tips"):
 
 
 
-def run_cfr_regret(game_name: str, num_iterations=500):
+def run_cfr_regret(game_name: str, num_iterations=1000):
     print("RUNNING CFR (tracking regret)")
     game = pyspiel.load_game(game_name)
     solver = cfr.CFRSolver(game)
@@ -207,7 +207,7 @@ def run_cfr_regret(game_name: str, num_iterations=500):
     return solver
 
 
-def run_efr_regret(game_name: str, num_iterations=500, deviation="csps"):
+def run_efr_regret(game_name: str, num_iterations=1000, deviation="csps"):
     print("RUNNING EFR (tracking regret)")
     game = pyspiel.load_game(game_name)
     solver = efr.EFRSolver(game, deviations_name=deviation)

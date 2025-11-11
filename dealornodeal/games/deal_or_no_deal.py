@@ -14,8 +14,14 @@ _MAX_SINGLE_ITEM_VALUE = 10
 
 
 
-_NUM_DISTINCT_ACTIONS = 1 + (_NUM_ITEMS_PER_TYPE + 1) ** _NUM_ITEM_TYPES #accept + all possible offers
-_MAX_CHANCE_NODE_OUTCOMES = (_MAX_SINGLE_ITEM_VALUE + 1) ** _NUM_ITEM_TYPES 
+# _NUM_DISTINCT_ACTIONS = 1 + (_NUM_ITEMS_PER_TYPE + 1) ** _NUM_ITEM_TYPES #accept + all possible offers
+# _MAX_CHANCE_NODE_OUTCOMES = (_MAX_SINGLE_ITEM_VALUE + 1) ** _NUM_ITEM_TYPES 
+
+
+_DECISION_ACTIONS = 1 + (_NUM_ITEMS_PER_TYPE + 1) ** _NUM_ITEM_TYPES
+_CHANCE_ACTIONS   = (_MAX_SINGLE_ITEM_VALUE + 1) ** _NUM_ITEM_TYPES
+_NUM_DISTINCT_ACTIONS = max(_DECISION_ACTIONS, _CHANCE_ACTIONS)
+_MAX_CHANCE_NODE_OUTCOMES = _CHANCE_ACTIONS
 
 
 _GAME_TYPE = pyspiel.GameType(
@@ -48,7 +54,7 @@ _GAME_INFO = pyspiel.GameInfo(
     min_utility = 0.0,
     max_utility =  _MAX_SINGLE_ITEM_VALUE * _NUM_ITEM_TYPES * _NUM_ITEMS_PER_TYPE,
     utility_sum = None,
-    max_game_length= _MAX_TURNS, #each player acts on alternating timesteps
+    max_game_length= _MAX_TURNS + 2, #each player acts on alternating timesteps
 )
 
 
@@ -87,7 +93,7 @@ class DealOrNoDealState(pyspiel.State):
         self._utility_max = game.utility_max
 
         #random stuff
-        self._cur_player = pyspiel.PlayerId.CHANCE   # randomly decide first player
+        #self._cur_player = pyspiel.PlayerId.CHANCE   # randomly decide first player
         self._turn = 0
         self._offers = [] #history of offers (list of allocations)
         self._agreement = False #did someone accept?
@@ -120,9 +126,7 @@ class DealOrNoDealState(pyspiel.State):
             return pyspiel.PlayerId.TERMINAL
         if any(u is None for u in self._utilities):
             return pyspiel.PlayerId.CHANCE
-        if self._cur_player == pyspiel.PlayerId.CHANCE:
-            return 0
-        return self._cur_player
+        return self._cur_player  # always 0 or 1 once utilities set
     
 
 
@@ -170,19 +174,31 @@ class DealOrNoDealState(pyspiel.State):
         if self.current_player() == pyspiel.PlayerId.CHANCE:
             next_pid = [i for i, u in enumerate(self._utilities) if u is None][0]
             self._utilities[next_pid] = self._decode_utility_action(action)
-            if any(u is None for u in self._utilities):
-                self._cur_player = pyspiel.PlayerId.CHANCE
-            else:
-                #non deterministic behavior breaks EFR
-                #self._cur_player = np.random.choice([0, 1]) #choose random player to start
 
-                self._cur_player = 0
+
+
+            # if any(u is None for u in self._utilities):
+            #     self._cur_player = pyspiel.PlayerId.CHANCE
+            # else:
+            #     #non deterministic behavior breaks EFR
+            #     #self._cur_player = np.random.choice([0, 1]) #choose random player to start
+
+            #     self._cur_player = 0
+            # return
+
+
+            # when both players' utilities are assigned, randomize who starts
+            if all(u is not None for u in self._utilities):
+                self._cur_player = 0      # deterministic starter for stability
+            # else: do nothing; current_player() will still return CHANCE until both are set
             return
+
 
         #have we reached an agreement? 
         if action == self._accept_action_id():
             self._agreement = True
             # don't increment turn here!!!!!
+
         else:
             offer = self._decode_offer_action(action)
             self._offers.append(offer)
@@ -212,32 +228,42 @@ class DealOrNoDealState(pyspiel.State):
     def chance_outcomes(self) -> List[Tuple[int,float]]:
         if self.current_player() != pyspiel.PlayerId.CHANCE:
             return []
-        outcomes = []
+        
         all_utils = self._all_utility_vectors()
+        #np.random.shuffle(all_utils)
         prob = 1.0 / len(all_utils)
-        for vec in all_utils:
-            outcomes.append((self._encode_utility_action(vec), prob))
-        return outcomes
+        return [(self._encode_utility_action(vec), prob) for vec in all_utils]
 
+
+
+        # outcomes = []
+        # all_utils = self._all_utility_vectors()
+        # prob = 1.0 / len(all_utils)
+        # for vec in all_utils:
+        #     outcomes.append((self._encode_utility_action(vec), prob))
+        # return outcomes
 
 
 
 
 
     def information_state_string(self, player: int = None) -> str:
-        """return infoset string for given player or current player if None"""
         if self.is_terminal():
             return "terminal"
-
         if self.current_player() == pyspiel.PlayerId.CHANCE:
             return "chance"
-
         if player is None:
             player = self.current_player()
 
-        util_str = "?" if self._utilities[player] is None else str(self._utilities[player])
-        offers_str = "; ".join([str(o) for o in self._offers])
-        return f"Player {player}, Utilities: {util_str}, Offers: {offers_str}, Turn: {self._turn}"
+        util = self._utilities[player]
+        util_str = "[" + ",".join(map(str, util)) + "]" if util is not None else "?"
+        offers_str = "[" + ";".join(",".join(map(str, o)) for o in self._offers) + "]"
+        return f"P{player}|U:{util_str}|H:{offers_str}|T:{self._turn}"
+
+
+
+
+
 
 
     def observation_string(self, player: int = None) -> str:
@@ -414,6 +440,7 @@ class DealOrNoDealGame(pyspiel.Game):
     def make_py_observer(self, iig_obs_type=None, params=None):
         """Returns an observer for this game (OpenSpiel compatibility)."""
         return DealOrNoDealObserver(
+            self,
             iig_obs_type or pyspiel.IIGObservationType(perfect_recall=False),
             params
         )
@@ -443,7 +470,7 @@ class DealOrNoDealObserver:
     the standard open_spiel observation API.
     """
 
-    def __init__(self, iig_obs_type, params):
+    def __init__(self, game, iig_obs_type, params):
         """
         constructor for the observer. called by your game's make_py_observer() method.
 
@@ -460,10 +487,9 @@ class DealOrNoDealObserver:
 
         # store what kind of info we should include in this observation
         # these flags will control what data we encode later.
+        self.num_item_types = game.num_item_types
         self.perfect_recall = iig_obs_type.perfect_recall
-        self.include_private = (
-            iig_obs_type.private_info == pyspiel.PrivateInfoType.SINGLE_PLAYER
-        )
+        self.include_private = (iig_obs_type.private_info == pyspiel.PrivateInfoType.SINGLE_PLAYER)
         self.include_public = iig_obs_type.public_info
 
         # we now define what pieces of data will make up our observation.
@@ -482,13 +508,13 @@ class DealOrNoDealObserver:
         if self.include_private:
             # here we assume 2 item types. later you could generalize by passing
             # game.num_item_types instead.
-            pieces.append(("utilities", 2, (2,)))
+            pieces.append(("utilities", self.num_item_types, (self.num_item_types,)))
 
         # 3. include public information visible to both players.
         #    this includes the most recent offer, the current turn number,
         #    and whether an agreement has been reached.
         if self.include_public:
-            pieces.append(("last_offer", 2, (2,)))
+            pieces.append(("last_offer", self.num_item_types, (self.num_item_types,)))
             pieces.append(("turn", 1, (1,)))
             pieces.append(("agreement", 1, (1,)))
 
