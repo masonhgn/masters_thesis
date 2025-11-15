@@ -10,7 +10,7 @@ import pyspiel
 from open_spiel.python.algorithms import cfr, efr
 from open_spiel.python.algorithms import outcome_sampling_mccfr as mccfr
 import sys
-from algos.mcefr import MCEFRSolver
+
 
 
 
@@ -124,26 +124,6 @@ def run_mccfr_agg(game_name="python_deal_or_no_deal_mini", iters=2000, eval_ever
     return {"x": xs, "agg": agg}
 
 
-def run_mcefr_agg(game_name="python_deal_or_no_deal", iters=2000, eval_every=100, seed=7, deviation="blind cf"):
-    """
-    Tracks MCEFR convergence by computing aggregate average external regret
-    from the deviation-based regrets in _info_state_nodes.
-    """
-    np.random.seed(seed)
-    game = pyspiel.load_game(game_name)
-    solver = MCEFRSolver(game, deviations_name=deviation)
-    xs, agg = [], []
-
-    for t in range(1, iters + 1):
-        solver.iteration()
-        if t % eval_every == 0:
-            val = _agg_avg_ext_regret(solver, t)
-            xs.append(t)
-            agg.append(val)
-            print(f"[MCEFR-{deviation}] Iter {t}/{iters}: avg_ext_regret={val:.6f}")
-
-    _plot(xs, agg, f"MCEFR Convergence ({deviation})", f"{game_name}_mcefr_{deviation.replace(' ', '_')}.png")
-    return {"x": xs, "agg": agg}
 
 
 
