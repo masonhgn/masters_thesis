@@ -10,7 +10,6 @@ import pyspiel
 from open_spiel.python.algorithms import cfr, efr
 from open_spiel.python.algorithms import outcome_sampling_mccfr as mccfr
 import sys
-sys.path.append('..')
 from algos.mcefr import MCEFRSolver
 
 
@@ -161,6 +160,6 @@ def run_mcefr_agg(game_name="python_deal_or_no_deal", iters=2000, eval_every=100
 
 
 #run_cfr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10)
-#run_efr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10, deviation="csps")
+run_efr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10, deviation="tips")
 #run_mccfr_agg("python_deal_or_no_deal", iters=20000, eval_every=50)
-run_mcefr_agg("python_deal_or_no_deal", iters=20000, eval_every=50, deviation="blind cf")
+#run_mcefr_agg("python_deal_or_no_deal", iters=20000, eval_every=50, deviation="blind cf")

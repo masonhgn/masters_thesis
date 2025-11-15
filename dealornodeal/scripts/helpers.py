@@ -334,27 +334,27 @@ if __name__ == "__main__":
 
     #original mini cfr
     print('running original mini cfr')
-    run_cfr_regret(game_name='python_deal_or_no_deal_mini')
+    run_cfr(game_name='python_deal_or_no_deal_mini')
 
 
 
 
-    #original mini efr tips
-    print('running original mini efr tips')
-    run_efr_regret(game_name='python_deal_or_no_deal_mini', deviation='tips')
+    # #original mini efr tips
+    # print('running original mini efr tips')
+    # run_efr_regret(game_name='python_deal_or_no_deal_mini', deviation='tips')
 
 
 
-    #original mini efr causal
-    print('running original mini efr causal')
-    run_efr_regret(game_name='python_deal_or_no_deal_mini', deviation='csps')
+    # #original mini efr causal
+    # print('running original mini efr causal')
+    # run_efr_regret(game_name='python_deal_or_no_deal_mini', deviation='csps')
 
 
 
 
-    #original full mccfr
-    print('running original full mccfr')
-    run_mccfr(game_name='python_deal_or_no_deal')
+    # #original full mccfr
+    # print('running original full mccfr')
+    # run_mccfr(game_name='python_deal_or_no_deal')
 
 
 
