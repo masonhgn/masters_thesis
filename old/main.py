@@ -10,18 +10,73 @@ import pyspiel
 from open_spiel.python.algorithms import cfr, efr
 from open_spiel.python.algorithms import outcome_sampling_mccfr as mccfr
 import sys
+import json
+
+import os
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+
+sys.path.append(parent_dir)
+
+
+#import regular size
+import games.deal_or_no_deal as deal_or_no_deal, old.deal_or_no_deal_zerosum as deal_or_no_deal_zerosum
+
+#import mini size
+import old.deal_or_no_deal_mini as deal_or_no_deal_mini, old.deal_or_no_deal_mini_zerosum as deal_or_no_deal_mini_zerosum
 
 
 
 
-import games.deal_or_no_deal as deal_or_no_deal, games.deal_or_no_deal_zerosum as deal_or_no_deal_zerosum
-import games.deal_or_no_deal_mini as deal_or_no_deal_mini, games.deal_or_no_deal_mini_zerosum as deal_or_no_deal_mini_zerosum
 
-# helpers.py (minimal single-function version)
+def custom_encoder(obj):
+    """Converts non-serializable objects to a string representation."""
+    try:
+        # Attempt to use the object's default serialization if available (e.g., for custom classes)
+        return obj.toJSON()
+    except AttributeError:
+        # Fallback to string representation for common types like datetime
+        return str(obj)
+
+
+def pprint(s):
+    pretty_json = json.dumps(
+        s,
+        indent=4,
+        default=custom_encoder
+    )
+    print(pretty_json)
+
+#work here
+
+
+def cfr_test(game_name="python_deal_or_no_deal_mini", iters=100, eval_every=10, seed=7):
+    np.random.seed(seed)
+    game = pyspiel.load_game(game_name)
+    solver = cfr.CFRSolver(game)
+    for t in range(1, iters + 1):
+        solver.evaluate_and_update_policy()
+        nodes = solver._info_state_nodes
+        #pprint(nodes)
 
 
 
 
+cfr_test()
+
+
+
+
+    # xs, agg = [], []
+    # for t in range(1, iters + 1):
+    #     solver.evaluate_and_update_policy()
+    #     if t % eval_every == 0:
+    #         val = _agg_avg_ext_regret(solver, t)
+    #         xs.append(t)
+    #         agg.append(val)
+    #         print(f"[CFR] Iter {t}/{iters}: avg_ext_regret={val:.6f}") 
+    # _plot(xs, agg, "CFR Convergence", f"{game_name}_cfr.png")
+    # return {"x": xs, "agg": agg}
 
 
 
@@ -140,6 +195,6 @@ def run_mccfr_agg(game_name="python_deal_or_no_deal_mini", iters=2000, eval_ever
 
 
 #run_cfr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10)
-run_efr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10, deviation="tips")
+# run_efr_agg("python_deal_or_no_deal_mini", iters=500, eval_every=10, deviation="tips")
 #run_mccfr_agg("python_deal_or_no_deal", iters=20000, eval_every=50)
 #run_mcefr_agg("python_deal_or_no_deal", iters=20000, eval_every=50, deviation="blind cf")

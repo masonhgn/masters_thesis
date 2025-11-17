@@ -1,8 +1,8 @@
 #main.py
 
 from open_spiel.python.algorithms import efr, cfr
-import games.deal_or_no_deal as deal_or_no_deal, games.deal_or_no_deal_zerosum as deal_or_no_deal_zerosum
-import games.deal_or_no_deal_mini as deal_or_no_deal_mini, games.deal_or_no_deal_mini_zerosum as deal_or_no_deal_mini_zerosum
+import games.deal_or_no_deal as deal_or_no_deal, old.deal_or_no_deal_zerosum as deal_or_no_deal_zerosum
+import old.deal_or_no_deal_mini as deal_or_no_deal_mini, old.deal_or_no_deal_mini_zerosum as deal_or_no_deal_mini_zerosum
 import numpy as np
 import pyspiel
 import matplotlib.pyplot as plt 
