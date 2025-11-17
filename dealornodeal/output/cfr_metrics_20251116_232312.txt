@@ -1,0 +1,35 @@
+============================================================
+CFR CONVERGENCE METRICS - DEAL OR NO DEAL
+============================================================
+
+GAME PARAMETERS:
+  max_turns: 3
+  max_num_instances: 5
+  discount: 1.0
+  prob_end: 0.0
+
+TIMING:
+  Total iterations: 20
+  Wall clock time: 24.81 seconds
+  Time per iteration: 1.2403 seconds
+  Iterations per second: 0.81
+
+FINAL METRICS:
+  Policy delta: 7.753136
+  Expected value P0: 2.1667
+  Expected value P1: 8.2667
+  Social welfare: 10.4333
+  Cumulative regret: 5.56
+  Policy variance: 0.000000
+
+CONVERGENCE ASSESSMENT:
+  Strategy convergence: WEAK (delta >= 0.5)
+  Policy stability: STABLE (low variance)
+
+============================================================
+ITERATION HISTORY:
+============================================================
+  Iter      Delta      EV_P0      EV_P1    Welfare   Variance     Regret
+----------------------------------------------------------------------------
+     0   0.000000     0.6333     0.6667     1.3000   0.000000      98.78
+    19   7.753136     2.1667     8.2667    10.4333   0.000000       5.56
