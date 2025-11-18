@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""test cfr convergence on deal or no deal with general-sum game metrics"""
+
 
 import sys
 import os
@@ -9,13 +8,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pyspiel
 import numpy as np
 import matplotlib.pyplot as plt
-from open_spiel.python.algorithms import cfr
+from open_spiel.python.algorithms import cfr, efr
 from open_spiel.python import policy as policy_module
 import games.deal_or_no_deal as deal_or_no_deal
 import random
 
 
-def compute_policy_delta(game, cfr_solver, prev_values):
+def compute_policy_delta(game, solver, prev_values):
     """
     compute measure of strategy change using expected value changes.
 
@@ -24,7 +23,7 @@ def compute_policy_delta(game, cfr_solver, prev_values):
 
     args:
         game: the game instance
-        cfr_solver: the cfr solver instance
+        solver: the solver instance
         prev_values: tuple of (ev_p0, ev_p1) from previous iteration
 
     returns:
@@ -32,7 +31,7 @@ def compute_policy_delta(game, cfr_solver, prev_values):
         current_values: current (ev_p0, ev_p1) for next iteration
     """
     # evaluate current policy
-    avg_policy = cfr_solver.average_policy()
+    avg_policy = solver.average_policy()
     ev_p0, ev_p1 = evaluate_policy_values(game, avg_policy, num_samples=30)
     current_values = (ev_p0, ev_p1)
 
@@ -122,7 +121,7 @@ def compute_policy_variance(metrics_history, n=5):
     return variance_p0, variance_p1
 
 
-def compute_cumulative_regret(cfr_solver, iteration):
+def compute_cumulative_regret(solver, iteration):
     """
     compute aggregate average external regret.
 
@@ -130,13 +129,13 @@ def compute_cumulative_regret(cfr_solver, iteration):
     this measures how much each player could have improved.
 
     args:
-        cfr_solver: the cfr solver instance
+        solver: the solver instance
         iteration: current iteration number (for normalization)
 
     returns:
         avg_external_regret: normalized aggregate regret
     """
-    nodes = cfr_solver._info_state_nodes
+    nodes = solver._info_state_nodes
     raw_sum = 0.0
 
     for node in nodes.values():
@@ -245,12 +244,128 @@ def run_cfr_with_metrics(game, num_iterations=500, checkpoint_interval=10, num_p
 
 
 
+
+
+
+
+
+def run_efr_with_metrics(game, deviation_type, num_iterations=500, checkpoint_interval=10, num_policy_samples=50):
+    """
+    run efr and track convergence metrics.
+
+    args:
+        game: the game to solve
+        num_iterations: number of efr iterations
+        checkpoint_interval: how often to compute metrics
+        num_policy_samples: number of samples for policy evaluation
+
+    returns:
+        metrics: dictionary containing all tracked metrics
+        efr_solver: the trained efr solver
+    """
+    efr_solver = efr.EFRSolver(game,deviations_name=deviation_type)
+
+    # initialize metric tracking
+    metrics = {
+        'iterations': [],
+        'policy_delta': [],
+        'expected_value_p0': [],
+        'expected_value_p1': [],
+        'social_welfare': [],
+        'variance_p0': [],
+        'variance_p1': [],
+        'cumulative_regret': []
+    }
+
+    prev_values = None
+
+    print(f"\nrunning efr for {num_iterations} iterations...")
+    print(f"computing metrics every {checkpoint_interval} iterations")
+    print("=" * 60)
+
+
+    import time
+
+
+    import psutil
+    import os
+
+    def get_memory_mb():
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024
+
+    print(f"\nStarting EFR at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    start_time = time.time()
+
+    for i in range(num_iterations):
+        #mem_before = get_memory_mb()
+        efr_solver.evaluate_and_update_policy()
+        #mem_after = get_memory_mb()
+        #print(f"mem={mem_after:.1f}MB (Δ{mem_after-mem_before:+.1f}MB), ")
+
+        if i % checkpoint_interval == 0 or i == num_iterations - 1:
+            # compute all metrics
+            delta, prev_values = compute_policy_delta(game, efr_solver, prev_values)
+            ev_p0, ev_p1 = prev_values  # reuse from delta computation
+            social_welfare = ev_p0 + ev_p1 #policy welfare is just the total EV. If both players improve then their policy is improving.
+
+            # store metrics
+            metrics['iterations'].append(i)
+            metrics['policy_delta'].append(delta)
+            metrics['expected_value_p0'].append(ev_p0)
+            metrics['expected_value_p1'].append(ev_p1)
+            metrics['social_welfare'].append(social_welfare)
+
+            # compute variance (needs history)
+            var_p0, var_p1 = compute_policy_variance(metrics)
+            metrics['variance_p0'].append(var_p0)
+            metrics['variance_p1'].append(var_p1)
+
+            # compute cumulative regret
+            cum_regret = compute_cumulative_regret(efr_solver, i + 1)
+            metrics['cumulative_regret'].append(cum_regret)
+
+            # print progress
+            print(f"iteration {i:4d}: "
+                  f"delta={delta:.6f}, "
+                  f"ev_p0={ev_p0:.3f}, "
+                  f"ev_p1={ev_p1:.3f}, "
+                  f"welfare={social_welfare:.3f}, "
+                  f"var={np.sqrt(var_p0 + var_p1):.4f}, "
+                  f"regret={cum_regret:.1f}")
+
+
+    total_time = time.time() - start_time
+    metrics['total_time'] = total_time
+
+    print("=" * 60)
+
+
+
+    return metrics, efr_solver
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_metrics(metrics, algo_name, output_dir):
     """
     plot all convergence metrics as separate image files with lines and dots.
 
     args:
-        metrics: dictionary of metrics from run_cfr_with_metrics
+        metrics: dictionary of metrics
         output_dir: directory to save plots
     """
 
@@ -262,7 +377,7 @@ def plot_metrics(metrics, algo_name, output_dir):
     plt.figure(figsize=(10, 6))
     plt.plot(iterations, metrics['policy_delta'], 'b-o', linewidth=1, 
              markersize=2, markerfacecolor='blue', markeredgecolor='darkblue')
-    plt.xlabel('cfr iteration', fontsize=12)
+    plt.xlabel(f'{algo_name} iteration', fontsize=12)
     plt.ylabel('policy delta (l2 norm)', fontsize=12)
     plt.title('strategy convergence', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
@@ -279,7 +394,7 @@ def plot_metrics(metrics, algo_name, output_dir):
              linewidth=1, label='player 0', alpha=0.8, markersize=2)
     plt.plot(iterations, metrics['expected_value_p1'], 'g-s',
              linewidth=1, label='player 1', alpha=0.8, markersize=2)
-    plt.xlabel('cfr iteration', fontsize=12)
+    plt.xlabel(f'{algo_name} iteration', fontsize=12)
     plt.ylabel('expected utility', fontsize=12)
     plt.title('player expected values', fontsize=14, fontweight='bold')
     plt.legend(fontsize=11)
@@ -294,7 +409,7 @@ def plot_metrics(metrics, algo_name, output_dir):
     plt.plot(iterations, metrics['social_welfare'], 'o-', color='purple', 
              linewidth=1, markersize=2, markerfacecolor='purple', 
              markeredgecolor='darkviolet')
-    plt.xlabel('cfr iteration', fontsize=12)
+    plt.xlabel(f'{algo_name} iteration', fontsize=12)
     plt.ylabel('total utility (p0 + p1)', fontsize=12)
     plt.title('social welfare', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
@@ -310,7 +425,7 @@ def plot_metrics(metrics, algo_name, output_dir):
     plt.plot(iterations, total_variance, 'o-', color='orange', 
              linewidth=1, markersize=2, markerfacecolor='orange',
              markeredgecolor='darkorange')
-    plt.xlabel('cfr iteration', fontsize=12)
+    plt.xlabel(f'{algo_name} iteration', fontsize=12)
     plt.ylabel('policy variance (std dev)', fontsize=12)
     plt.title('policy stability', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
@@ -324,7 +439,7 @@ def plot_metrics(metrics, algo_name, output_dir):
     plt.plot(iterations, metrics['cumulative_regret'], 'o-', color='brown', 
              linewidth=1, markersize=2, markerfacecolor='brown',
              markeredgecolor='saddlebrown')
-    plt.xlabel('cfr iteration', fontsize=12)
+    plt.xlabel(f'{algo_name} iteration', fontsize=12)
     plt.ylabel('total absolute regret', fontsize=12)
     plt.title('cumulative regret', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
@@ -352,8 +467,8 @@ def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='o
     Save experiment results to a new directory with JSON and CSV files.
     
     Args:
-        metrics: dictionary of metrics from run_cfr_with_metrics
-        num_iterations: number of CFR iterations run
+        metrics: dictionary of metrics
+        num_iterations: number of iterations run
         game_params: dictionary of game parameters
         base_dir: base directory for all experiments
     
@@ -365,11 +480,11 @@ def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='o
     
     # Create unique experiment directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_dir, f"cfr_experiment_{timestamp}")
+    experiment_dir = os.path.join(base_dir, f"{algo_name}_experiment_{timestamp}")
     os.makedirs(experiment_dir, exist_ok=True)
     
     # Save both JSON and CSV
-    json_path = save_to_json(metrics, num_iterations, game_params, experiment_dir)
+    json_path = save_to_json(metrics, num_iterations, game_params, experiment_dir, algo_name=algo_name)
     #csv_path = save_to_csv(metrics, experiment_dir)
 
     plot_metrics(metrics, algo_name, experiment_dir)
@@ -390,13 +505,13 @@ def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='o
     return experiment_dir
 
 
-def save_to_json(metrics, num_iterations, game_params, output_dir):
+def save_to_json(metrics, num_iterations, game_params, output_dir, algo_name):
     """
     save complete experiment to json file with all metrics so that we can replot them how we want
     
     Args:
-        metrics: dictionary of metrics from run_cfr_with_metrics
-        num_iterations: number of CFR iterations run
+        metrics: dictionary of metrics 
+        num_iterations: number of iterations run
         game_params: dictionary of game parameters
         output_dir: directory to save the file
     
@@ -411,7 +526,7 @@ def save_to_json(metrics, num_iterations, game_params, output_dir):
     experiment_data = {
         'metadata': {
             'timestamp': datetime.datetime.now().isoformat(),
-            'algorithm': 'CFR',
+            'algorithm': algo_name,
             'game': 'Deal or No Deal'
         },
         'game_parameters': game_params,
@@ -537,24 +652,101 @@ def run_cfr(params):
     #analyze_convergence(metrics)
 
     # plot metrics
-    plot_metrics(metrics, "cfr")
+
     print("COMPLETE!")
 
 
 
+
+def run_efr(params):
+    """run efr with comprehensive metrics on deal or no deal"""
+
+    random.seed(params['random_seed'])
+
+    game_params = {
+        "max_turns": params['max_turns'],
+        "max_num_instances": params['max_num_instances'],
+        "discount": params['discount'],
+        "prob_end": params['prob_end']
+    }
+
+
+
+    # create game with small parameters for testing
+    game = pyspiel.load_game("python_deal_or_no_deal", game_params)
+
+
+    print("EFR CONVERGENCE METRICS - DEAL OR NO DEAL")
+
+    print(f"game: {game}")
+    print(f"num players: {game.num_players()}")
+    print(f"num distinct actions: {game.num_distinct_actions()}")
+    print(f"max chance outcomes: {game.max_chance_outcomes()}")
+
+
+
+
+    metrics, efr_solver = run_efr_with_metrics(
+        game=game,
+        deviation_type=params['deviation_type'],
+        num_iterations=params['num_iterations'],
+        checkpoint_interval=params['checkpoint_interval'],
+        num_policy_samples=params['num_ev_samples']
+    )
+
+
+
+    experiment_dir = save_experiment(metrics, params['num_iterations'], game_params, 'efr')
+    
+
+
+    # plot metrics
+
+    print("COMPLETE!")
+
+
+
+
+
+
 if __name__ == "__main__":
-    try:
-        run_cfr(
-            params={
-            'num_iterations': 2000,
-            'checkpoint_interval': 10,
-            'num_ev_samples': 20,
-            "max_turns": 4,
-            "max_num_instances": 5,
-            "discount": 1.0,
-            "prob_end": 0.25,
-            "random_seed": 42,
-            }
-        )
-    except:
-        pass
+
+
+
+    # run_efr(
+    #     params={
+    #     'num_iterations': 1000,
+    #     'deviation_type': 'csps',
+    #     'checkpoint_interval': 10,
+    #     'num_ev_samples': 10,
+    #     "max_turns": 2,
+    #     "max_num_instances": 3,
+    #     "discount": 1.0,
+    #     "prob_end": 0.25,
+    #     "random_seed": 42,
+    #     }
+    # )
+
+
+
+
+
+
+    run_cfr(
+        params={
+        'num_iterations': 1000,
+        # 'deviation_type': 'csps',
+        'checkpoint_interval': 10,
+        'num_ev_samples': 10,
+        "max_turns": 3,
+        "max_num_instances": 3,
+        "discount": 1.0,
+        "prob_end": 0.25,
+        "random_seed": 42,
+        }
+    )
+
+
+
+
+
