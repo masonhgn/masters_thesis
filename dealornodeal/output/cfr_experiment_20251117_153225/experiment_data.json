@@ -1,8 +1,13 @@
+
+
 {
-  "metadata": {
+  "game_metadata": {
     "timestamp": "2025-11-17T15:32:25.396928",
-    "algorithm": "cfr",
     "game": "Deal or No Deal"
+  },
+  "algo_metadata": {
+    "algo_name": "cfr",
+    "algo_longname": "CFR (tabular)"
   },
   "game_parameters": {
     "max_turns": 2,

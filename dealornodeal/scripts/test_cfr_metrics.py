@@ -9,6 +9,7 @@ import pyspiel
 import numpy as np
 import matplotlib.pyplot as plt
 from open_spiel.python.algorithms import cfr, efr
+from open_spiel.python.algorithms import outcome_sampling_mccfr as mccfr
 from open_spiel.python import policy as policy_module
 import games.deal_or_no_deal as deal_or_no_deal
 import random
@@ -96,6 +97,14 @@ def evaluate_policy_values(game, policy, num_samples=100):
 
 
 
+
+
+
+
+
+
+
+
 def compute_policy_variance(metrics_history, n=5):
     """
     compute variance in recent expected values.
@@ -121,6 +130,41 @@ def compute_policy_variance(metrics_history, n=5):
     return variance_p0, variance_p1
 
 
+
+
+
+def compute_cumulative_regret_mc(solver, iteration):
+    """
+    compute aggregate average external regret for monte carlo algos.
+
+    for each info state, takes the maximum positive regret.
+    this measures how much each player could have improved.
+
+    args:
+        solver: the solver instance
+        iteration: current iteration number (for normalization)
+
+    returns:
+        avg_external_regret: normalized aggregate regret
+    """
+
+
+    nodes = solver._infostates
+    raw_sum = 0.0
+
+    for key, (regrets, avg_strat) in nodes.items():
+        max_reg = np.maximum(regrets, 0.0)
+        raw_sum += float(np.max(max_reg))
+
+
+    # normalize by iteration count
+    return raw_sum / max(iteration, 1)
+
+
+
+
+
+
 def compute_cumulative_regret(solver, iteration):
     """
     compute aggregate average external regret.
@@ -135,6 +179,8 @@ def compute_cumulative_regret(solver, iteration):
     returns:
         avg_external_regret: normalized aggregate regret
     """
+
+
     nodes = solver._info_state_nodes
     raw_sum = 0.0
 
@@ -155,21 +201,17 @@ def compute_cumulative_regret(solver, iteration):
     return raw_sum / max(iteration, 1)
 
 
+
+
+
+
+
+
 def run_cfr_with_metrics(game, num_iterations=500, checkpoint_interval=10, num_policy_samples=50):
     """
-    run cfr and track convergence metrics.
-
-    args:
-        game: the game to solve
-        num_iterations: number of cfr iterations
-        checkpoint_interval: how often to compute metrics
-        num_policy_samples: number of samples for policy evaluation
-
-    returns:
-        metrics: dictionary containing all tracked metrics
-        cfr_solver: the trained cfr solver
+    run cfr and track convergence metrics with detailed timing.
     """
-    cfr_solver = cfr.CFRSolver(game)
+    cfr_solver = cfr.CFRPlusSolver(game)
 
     # initialize metric tracking
     metrics = {
@@ -189,20 +231,32 @@ def run_cfr_with_metrics(game, num_iterations=500, checkpoint_interval=10, num_p
     print(f"computing metrics every {checkpoint_interval} iterations")
     print("=" * 60)
 
-
     import time
 
     print(f"\nStarting CFR at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     start_time = time.time()
+    
+    # Timing breakdown
+    time_cfr_iteration = 0.0
+    time_policy_eval = 0.0
+    time_other_metrics = 0.0
 
     for i in range(num_iterations):
+        # Time CFR iteration
+        iter_start = time.time()
         cfr_solver.evaluate_and_update_policy()
+        time_cfr_iteration += time.time() - iter_start
 
         if i % checkpoint_interval == 0 or i == num_iterations - 1:
-            # compute all metrics
+            # Time policy evaluation
+            eval_start = time.time()
             delta, prev_values = compute_policy_delta(game, cfr_solver, prev_values)
-            ev_p0, ev_p1 = prev_values  # reuse from delta computation
-            social_welfare = ev_p0 + ev_p1 #policy welfare is just the total EV. If both players improve then their policy is improving.
+            time_policy_eval += time.time() - eval_start
+            
+            # Time other metrics
+            other_start = time.time()
+            ev_p0, ev_p1 = prev_values
+            social_welfare = ev_p0 + ev_p1
 
             # store metrics
             metrics['iterations'].append(i)
@@ -219,6 +273,8 @@ def run_cfr_with_metrics(game, num_iterations=500, checkpoint_interval=10, num_p
             # compute cumulative regret
             cum_regret = compute_cumulative_regret(cfr_solver, i + 1)
             metrics['cumulative_regret'].append(cum_regret)
+            
+            time_other_metrics += time.time() - other_start
 
             # print progress
             print(f"iteration {i:4d}: "
@@ -229,12 +285,8 @@ def run_cfr_with_metrics(game, num_iterations=500, checkpoint_interval=10, num_p
                   f"var={np.sqrt(var_p0 + var_p1):.4f}, "
                   f"regret={cum_regret:.1f}")
 
-
     total_time = time.time() - start_time
     metrics['total_time'] = total_time
-
-    print("=" * 60)
-
 
 
     return metrics, cfr_solver
@@ -360,6 +412,124 @@ def run_efr_with_metrics(game, deviation_type, num_iterations=500, checkpoint_in
 
 
 
+
+
+
+
+def run_mccfr_with_metrics(game, num_iterations=1000, checkpoint_interval=10, num_policy_samples=50):
+    """
+    run mccfr and track convergence metrics.
+
+    args:
+        game: the game to solve
+        num_iterations: number of mccfr iterations
+        checkpoint_interval: how often to compute metrics
+        num_policy_samples: number of samples for policy evaluation
+
+    returns:
+        metrics: dictionary containing all tracked metrics
+        efr_solver: the trained efr solver
+    """
+    solver = mccfr.OutcomeSamplingSolver(game)
+
+    # initialize metric tracking
+    metrics = {
+        'iterations': [],
+        'policy_delta': [],
+        'expected_value_p0': [],
+        'expected_value_p1': [],
+        'social_welfare': [],
+        'variance_p0': [],
+        'variance_p1': [],
+        'cumulative_regret': []
+    }
+
+    prev_values = None
+
+    print(f"\nrunning mccfr for {num_iterations} iterations...")
+    print(f"computing metrics every {checkpoint_interval} iterations")
+    print("=" * 60)
+
+
+    import time
+
+
+    import psutil
+    import os
+
+    def get_memory_mb():
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024
+
+    print(f"\nStarting MCCFR at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    start_time = time.time()
+
+    for i in range(num_iterations):
+        #mem_before = get_memory_mb()
+        solver.iteration()
+        #mem_after = get_memory_mb()
+        #print(f"mem={mem_after:.1f}MB (Δ{mem_after-mem_before:+.1f}MB), ")
+
+        if i % checkpoint_interval == 0 or i == num_iterations - 1:
+            # compute all metrics
+            delta, prev_values = compute_policy_delta(game, solver, prev_values)
+            ev_p0, ev_p1 = prev_values  # reuse from delta computation
+            social_welfare = ev_p0 + ev_p1 #policy welfare is just the total EV. If both players improve then their policy is improving.
+
+            # store metrics
+            metrics['iterations'].append(i)
+            metrics['policy_delta'].append(delta)
+            metrics['expected_value_p0'].append(ev_p0)
+            metrics['expected_value_p1'].append(ev_p1)
+            metrics['social_welfare'].append(social_welfare)
+
+            # compute variance (needs history)
+            var_p0, var_p1 = compute_policy_variance(metrics)
+            metrics['variance_p0'].append(var_p0)
+            metrics['variance_p1'].append(var_p1)
+
+            # compute cumulative regret
+            cum_regret = compute_cumulative_regret_mc(solver, i + 1)
+            metrics['cumulative_regret'].append(cum_regret)
+
+            # print progress
+            print(f"iteration {i:4d}: "
+                  f"delta={delta:.6f}, "
+                  f"ev_p0={ev_p0:.3f}, "
+                  f"ev_p1={ev_p1:.3f}, "
+                  f"welfare={social_welfare:.3f}, "
+                  f"var={np.sqrt(var_p0 + var_p1):.4f}, "
+                  f"regret={cum_regret:.1f}")
+
+
+    total_time = time.time() - start_time
+    metrics['total_time'] = total_time
+
+    print("=" * 60)
+
+
+
+    return metrics, solver
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_metrics(metrics, algo_name, output_dir):
     """
     plot all convergence metrics as separate image files with lines and dots.
@@ -461,8 +631,8 @@ def plot_metrics(metrics, algo_name, output_dir):
 
 
 
-
-def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='output'):
+#def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='output'):
+def save_experiment(save_params, base_dir='output'):
     """
     Save experiment results to a new directory with JSON and CSV files.
     
@@ -480,14 +650,14 @@ def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='o
     
     # Create unique experiment directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_dir, f"{algo_name}_experiment_{timestamp}")
+    experiment_dir = os.path.join(base_dir, f"{save_params['algo_metadata']['algo_name']}_experiment_{timestamp}")
     os.makedirs(experiment_dir, exist_ok=True)
     
     # Save both JSON and CSV
-    json_path = save_to_json(metrics, num_iterations, game_params, experiment_dir, algo_name=algo_name)
+    json_path = save_to_json(save_params, output_dir=experiment_dir)
     #csv_path = save_to_csv(metrics, experiment_dir)
 
-    plot_metrics(metrics, algo_name, experiment_dir)
+    plot_metrics(save_params['metrics'], save_params['algo_metadata']['algo_longname'], experiment_dir)
 
 
 
@@ -504,8 +674,8 @@ def save_experiment(metrics, num_iterations, game_params, algo_name, base_dir='o
     
     return experiment_dir
 
-
-def save_to_json(metrics, num_iterations, game_params, output_dir, algo_name):
+#def save_to_json(metrics, num_iterations, game_params, output_dir, algo_name):
+def save_to_json(save_params, output_dir):
     """
     save complete experiment to json file with all metrics so that we can replot them how we want
     
@@ -522,14 +692,18 @@ def save_to_json(metrics, num_iterations, game_params, output_dir, algo_name):
     import datetime
     
     filepath = os.path.join(output_dir, 'experiment_data.json')
+
+
+    num_iterations = save_params['num_iterations']
+    metrics = save_params['metrics']
     
     experiment_data = {
-        'metadata': {
+        'game_metadata': {
             'timestamp': datetime.datetime.now().isoformat(),
-            'algorithm': algo_name,
             'game': 'Deal or No Deal'
         },
-        'game_parameters': game_params,
+        'algo_metadata': save_params['algo_metadata'],
+        'game_parameters': save_params['game_params'],
         'timing': {
             'total_iterations': num_iterations,
             'wall_clock_seconds': metrics['total_time'],
@@ -645,8 +819,19 @@ def run_cfr(params):
     )
 
 
+    save_params = {
+        'algo_metadata': {
+            'algo_name': 'cfr',
+            'algo_longname': 'CFR (tabular)'
+        },
+        'game_params': game_params,
+        'num_iterations': params['num_iterations'],
+        'metrics': metrics,
+    }
+
+
     #save_metrics_to_file(metrics, num_iterations=params['num_iterations'], game_params=game_params)
-    experiment_dir = save_experiment(metrics, params['num_iterations'], game_params, 'cfr')
+    experiment_dir = save_experiment(save_params)
     
     # analyze results
     #analyze_convergence(metrics)
@@ -695,8 +880,19 @@ def run_efr(params):
     )
 
 
+    save_params = {
+        'algo_metadata': {
+            'algo_name': f"efr_{params['deviation_type']}",
+            'algo_longname': f"EFR ({params['deviation_type']})"
+        },
+        'game_params': game_params,
+        'num_iterations': params['num_iterations'],
+        'metrics': metrics,
+    }
 
-    experiment_dir = save_experiment(metrics, params['num_iterations'], game_params, 'efr')
+
+
+    experiment_dir = save_experiment(save_params=save_params)
     
 
 
@@ -709,7 +905,103 @@ def run_efr(params):
 
 
 
+
+
+
+
+
+
+
+def run_mccfr(params):
+    """run mccfr with comprehensive metrics on deal or no deal"""
+
+    random.seed(params['random_seed'])
+
+    game_params = {
+        "max_turns": params['max_turns'],
+        "max_num_instances": params['max_num_instances'],
+        "discount": params['discount'],
+        "prob_end": params['prob_end']
+    }
+
+
+
+    # create game with small parameters for testing
+    game = pyspiel.load_game("python_deal_or_no_deal", game_params)
+
+
+    print("MCCFR CONVERGENCE METRICS - DEAL OR NO DEAL")
+
+    print(f"game: {game}")
+    print(f"num players: {game.num_players()}")
+    print(f"num distinct actions: {game.num_distinct_actions()}")
+    print(f"max chance outcomes: {game.max_chance_outcomes()}")
+
+
+
+
+    metrics, solver = run_mccfr_with_metrics(
+        game=game,
+        num_iterations=params['num_iterations'],
+        checkpoint_interval=params['checkpoint_interval'],
+        num_policy_samples=params['num_ev_samples']
+    )
+
+
+    save_params = {
+        'algo_metadata': {
+            'algo_name': f"mccfr",
+            'algo_longname': f"MCCFR"
+        },
+        'game_params': game_params,
+        'num_iterations': params['num_iterations'],
+        'metrics': metrics,
+    }
+
+
+
+    experiment_dir = save_experiment(save_params=save_params)
+    
+
+
+    # plot metrics
+
+    print("COMPLETE!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
+
+
+
+
+
+    run_mccfr(
+        params={
+        'num_iterations': 20000,
+        'checkpoint_interval': 100,
+        'num_ev_samples': 10,
+        "max_turns": 10,
+        "max_num_instances": 100,
+        "discount": 1.0,
+        "prob_end": 0.1,
+        "random_seed": 42,
+        }
+    )
+
+
+
 
 
 
@@ -732,19 +1024,19 @@ if __name__ == "__main__":
 
 
 
-    run_cfr(
-        params={
-        'num_iterations': 1000,
-        # 'deviation_type': 'csps',
-        'checkpoint_interval': 10,
-        'num_ev_samples': 10,
-        "max_turns": 3,
-        "max_num_instances": 3,
-        "discount": 1.0,
-        "prob_end": 0.25,
-        "random_seed": 42,
-        }
-    )
+    # run_cfr(
+    #     params={
+    #     'num_iterations': 50,
+    #     # 'deviation_type': 'csps',
+    #     'checkpoint_interval': 10,
+    #     'num_ev_samples': 10,
+    #     "max_turns": 3,
+    #     "max_num_instances": 3,
+    #     "discount": 1.0,
+    #     "prob_end": 0.25,
+    #     "random_seed": 42,
+    #     }
+    # )
 
 
 
