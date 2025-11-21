@@ -1,0 +1,248 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{setspace}
+\usepackage{amsmath, amssymb}
+
+\setstretch{1.2}
+
+\newcommand{\amy}[1]{{\color{red}[\textsc{Amy}: \emph{#1}]}}
+\newcommand{\samy}[2]{{\color{red}\sout{#1}\color{red}#2}}
+
+\begin{document}
+
+\section*{Research Outline: Deal or No Deal with CFR, EFR, etc.}
+
+\subsection*{Core Questions}
+
+Our goal is to address the following:
+
+\begin{enumerate}
+    \item How does \textit{Deal or No Deal} behave when solved with CFR, EFR, and MCCFR, MCEFR?
+    \item What does convergence look like for different algorithms and versions of the game?
+    \item What kinds of policies do these algorithms converge to?
+    \item Bigger picture question: How can we effectively learn to a strong equilibrium when facing a situation with a huge game tree like this?
+\end{enumerate}
+
+\subsection*{Game Variants}
+
+We start by defining the original game implementation and several related versions that differ in size and type.
+
+Parameters are defined as:
+\[
+(\text{max\_turns},~\text{num\_item\_types},~\text{max\_single\_item\_utility})
+\]
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Implementation Name} & \textbf{Property} & \textbf{Parameters} \\
+\midrule
+Original-Full   & general sum & (10, 3, 10) \\
+Original-Mini   & general sum & (3, 1, 1)   \\
+\bottomrule
+\end{tabular}
+\caption*{Table 1: Implementations of the \textit{Deal or No Deal} game with varying scale and type.}
+\end{table}
+
+\subsection*{Cumulative Regret Comparison}
+
+We compare the cumulative regret across different algorithms: CFR, EFR (TIPS), EFR (CSPS), and Monte Carlo CFR (1,000 iterations). The following plot shows how regret accumulates over training iterations for each algorithm.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{../output/combined_cumulative_regret.png}
+\caption*{Figure 1: Combined cumulative regret comparison across CFR, EFR (TIPS), EFR (CSPS), and MCCFR algorithms.}
+\end{figure}
+
+The convergence analysis reveals distinct performance characteristics across algorithms. EFR (TIPS) achieves the fastest convergence to low regret, reaching a final cumulative regret of 0.0067 after 1,000 iterations. Standard CFR follows as the second-best performer with a final regret of 0.0097, demonstrating strong convergence despite its simpler regret-matching mechanism. EFR (CSPS) converges more slowly, achieving a final regret of 0.0117. The Monte Carlo CFR variant, while computationally efficient, exhibits significantly higher regret (1.49) due to the variance introduced by sampling, making it less suitable for this game size where exact computation remains tractable.
+
+\subsection*{Computational Efficiency}
+
+While convergence quality is important, computational cost is equally critical for practical applications. Figure 2 compares the wall clock time required for each algorithm to complete 1,000 iterations.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{../output/wall_clock_comparison.png}
+\caption*{Figure 2: Wall clock time comparison for 1,000 iterations across all algorithms.}
+\end{figure}
+
+The computational costs vary dramatically across algorithms. Standard CFR completes 1,000 iterations in 36.05 seconds, providing an excellent balance between convergence quality and speed. Monte Carlo CFR is extremely fast at 0.57 seconds, achieving a 63× speedup over CFR, though at the cost of convergence quality. The EFR variants are significantly more expensive: EFR (TIPS) requires 470.55 seconds (13× slower than CFR) and EFR (CSPS) requires 526.93 seconds (15× slower than CFR). This substantial computational overhead is due to EFR's more complex regret tracking over deviation types rather than individual actions. For this game size, CFR offers the best trade-off between convergence speed and computational efficiency.
+
+\subsection*{Policy Evolution Dynamics}
+
+Beyond measuring convergence through regret, we examine how the policies themselves evolve during training. Figure 3 shows the policy delta—the L2 norm of the change in expected values between consecutive checkpoints—for each algorithm.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/cfr_experiment_20251117_153225/policy_delta.png}
+  \caption{CFR}
+\end{subfigure}
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/efr_tips_experiment_20251117_235453/policy_delta.png}
+  \caption{EFR (TIPS)}
+\end{subfigure}
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/efr_csps_experiment_20251118_001551/policy_delta.png}
+  \caption{EFR (CSPS)}
+\end{subfigure}
+\caption*{Figure 3: Policy delta over iterations for CFR, EFR (TIPS), and EFR (CSPS).}
+\end{figure}
+
+A striking observation across all three algorithms is that policy delta does not converge smoothly to zero. Instead, the policies continue to evolve in an almost cyclical manner throughout training, with periodic spikes in policy change even after many iterations. This behavior suggests that while the average policies are converging toward equilibrium (as evidenced by decreasing regret), the instantaneous policies oscillate between different strategic configurations. This oscillatory behavior is characteristic of regret minimization algorithms in general-sum games, where the space of near-optimal strategies may form a connected manifold rather than a single fixed point. The persistence of these oscillations indicates that the algorithms are exploring different equilibria or near-equilibria within the solution space.
+
+\subsection*{Player Payoff Asymmetry}
+
+Figure 4 shows the expected values for both players under the average policy as training progresses. A clear pattern emerges across all algorithms: Player 0 consistently achieves significantly higher expected utility than Player 1.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/cfr_experiment_20251117_153225/expected_values.png}
+  \caption{CFR}
+\end{subfigure}
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/efr_tips_experiment_20251117_235453/expected_values.png}
+  \caption{EFR (TIPS)}
+\end{subfigure}
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{../output/efr_csps_experiment_20251118_001551/expected_values.png}
+  \caption{EFR (CSPS)}
+\end{subfigure}
+\caption*{Figure 4: Expected values for both players over iterations for CFR, EFR (TIPS), and EFR (CSPS).}
+\end{figure}
+
+This asymmetry is inherent to the game structure rather than an artifact of the learning algorithms. In the 2-turn mini version, Player 0 typically achieves expected values around 9.2–9.4, while Player 1 achieves values around 3.0–3.5, giving Player 0 roughly a 3× advantage. This disparity arises from the sequential nature of the negotiation and the structural advantages in the game rules. The first mover (Player 0) has the opportunity to set the terms of negotiation and can leverage information asymmetries more effectively. All three algorithms converge to similar payoff distributions, suggesting they are finding equilibria with comparable bargaining outcomes despite their different convergence trajectories.
+
+\subsection*{Impact of Game Length on Payoff Distribution}
+
+To understand how game length affects the player asymmetry, we examined CFR convergence on variants with different numbers of negotiation turns. Figure 5 shows expected values for 3-turn and 4-turn versions of the game.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{../output/extra/cfr_experiment_3turn/expected_values.png}
+  \caption{CFR on 3-turn game}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{../output/extra/cfr_experiment_4turn/expected_values.png}
+  \caption{CFR on 4-turn game}
+\end{subfigure}
+\caption*{Figure 5: Expected values for players in extended game variants with 3 and 4 turns.}
+\end{figure}
+
+A remarkable pattern emerges: the player asymmetry not only diminishes but actually \textit{reverses} as the game lengthens. In the 3-turn variant, Player 1 gains the advantage with expected value around 8.27 compared to Player 0's 5.4—a complete flip from the 2-turn game. By the 4-turn variant, the payoffs become nearly balanced, with Player 0 at 8.07 and Player 1 at 7.4. This suggests that the first-mover advantage in shorter games transforms into a last-mover advantage in longer games, likely because additional negotiation rounds give the second player more opportunities to respond to and counter the first player's proposals. The convergence toward equity in longer games indicates that the asymmetry is a function of strategic depth rather than an intrinsic bias in the game mechanics.
+
+
+
+
+
+
+
+
+
+
+\section{Convergence Metrics}
+
+We track several metrics to evaluate the convergence behavior of different regret minimization algorithms across different game variants. These metrics provide complementary views of convergence: some measure strategic stability, others measure performance, and some capture the theoretical guarantees of regret minimization.
+
+\subsection{Policy Delta}
+
+Policy delta measures the rate of change in expected values between consecutive checkpoint iterations:
+
+\begin{equation}
+\delta_t = \sqrt{(v_0^t - v_0^{t-1})^2 + (v_1^t - v_1^{t-1})^2}
+\end{equation}
+
+where $v_i^t$ denotes the expected value for player $i$ at iteration $t$ under the average policy. This metric computes the L2 norm (Euclidean distance) of the change vector in the expected value space.
+
+\textbf{Intuition:} Policy delta quantifies how rapidly the strategy is evolving. When algorithms converge to an equilibrium, the policy stabilizes and this metric approaches zero. Large values indicate the strategy is still undergoing significant changes, while values near zero suggest convergence to a stable solution. This metric is particularly useful because it directly measures strategic change regardless of whether the game is zero-sum or general-sum.
+
+\subsection{Expected Values}
+
+For each player $i$, we estimate the expected value under the current average policy:
+
+\begin{equation}
+v_i(\pi^t) \approx \frac{1}{N} \sum_{j=1}^{N} u_i(s_j)
+\end{equation}
+
+where $\pi^t$ is the average policy at iteration $t$, $s$ represents a complete game trajectory sampled by following $\pi^t$, $u_i(s)$ is player $i$'s utility for trajectory $s$, and $N$ is the number of Monte Carlo rollouts used for estimation.
+
+\textbf{Intuition:} Expected values tell us the average payoff each player receives when both follow the current average strategy. In zero-sum games, these values should sum to approximately zero (the game's constant sum), and their individual magnitudes indicate how favorable the equilibrium is for each player. In general-sum games like our Deal or No Deal variants, these values reflect how much utility each player extracts from the negotiation. Tracking how these values change over iterations helps us understand whether players are finding mutually beneficial strategies (in general-sum settings) or settling into the game-theoretic equilibrium.
+
+\newpage
+
+\subsection{Social Welfare}
+
+Social welfare aggregates the total utility achieved by all players:
+
+\begin{equation}
+W(\pi^t) = v_0(\pi^t) + v_1(\pi^t)
+\end{equation}
+
+
+
+\textbf{Intuition:} Social welfare measures the total value generated in the game. In zero-sum games, this should remain constant (typically zero) as one player's gain is exactly another's loss. However, in general-sum games like Deal or No Deal, social welfare can vary significantly depending on the strategies employed. Increasing social welfare indicates that players are finding more efficient, mutually beneficial agreements rather than destructive or wasteful strategies. For example, in Deal or No Deal, low welfare might occur if players frequently fail to reach agreements (both get zero), while high welfare occurs when they successfully negotiate trades. Monitoring social welfare helps us understand whether algorithms are learning cooperative strategies in general-sum settings.
+
+\subsection{Policy Variance}
+
+Policy variance measures the stability of expected values over recent iterations:
+
+\begin{equation}
+\text{Var}_i^t = \frac{1}{n} \sum_{j=t-n+1}^{t} (v_i^j - \bar{v}_i^t)^2
+\end{equation}
+
+where $\bar{v}_i^t = \frac{1}{n}\sum_{j=t-n+1}^{t} v_i^j$ is the mean expected value over the last $n$ measurements. We use $n=5$ in our implementation.
+
+We report the combined variance across both players:
+
+\begin{equation}
+\sigma^t = \sqrt{\text{Var}_0^t + \text{Var}_1^t}
+\end{equation}
+
+\textbf{Intuition:} While policy delta measures iteration-to-iteration change, variance looks at stability over a window of recent iterations. A converged policy should exhibit low variance, meaning the expected values aren't oscillating significantly. High variance indicates the strategy is still fluctuating, perhaps cycling between different strategic approaches or struggling to settle. This metric complements policy delta: a strategy might have small step-by-step changes (low delta) but still be slowly drifting (high variance), or it might have large individual jumps (high delta) that average out to stable behavior (low variance). Low variance is a strong signal that the algorithm has found a stable equilibrium.
+
+\subsection{Aggregate Average Regret}
+
+We compute the aggregate average regret across all information states:
+
+\begin{equation}
+R^t_{\text{avg}} = \frac{1}{t} \sum_{I \in \mathcal{I}} \max_{a \in A(I)} \max\left(0, r^t_I(a)\right)
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\mathcal{I}$ is the set of all information states for the player
+    \item $A(I)$ is the set of legal actions at information state $I$
+    \item $r^t_I(a)$ is the cumulative regret for action $a$ at information state $I$ through iteration $t$
+\end{itemize}
+
+For each information state, we take the maximum positive regret across all actions (negative regrets are clipped to zero), sum these values across all information states, and normalize by the iteration number.
+
+\textbf{Intuition:} Regret measures how much a player wishes, in hindsight, they had played differently. At each decision point (information state), we ask: "What's the most we regret not taking a particular action?" Positive regret for an action means that, given the opponents' play history, we would have done better by always choosing that action instead of what we actually played. Summing these maximum regrets across all decision points gives us a measure of total opportunity cost. Dividing by the iteration number gives us the \emph{average} regret per iteration. Both CFR and EFR are designed to minimize regret, so this metric should decrease over time. Low average regret indicates the algorithm has found a strategy where no single action at any decision point would have been significantly better in hindsight.
+
+\textbf{Important consideration:} This metric must be interpreted carefully when comparing CFR and EFR. CFR tracks regret at the action level (one regret value per action per information state), while EFR can track regret at different granularities depending on the deviation type used (potentially many more regret values per information state). Therefore, direct numerical comparisons of this metric between CFR and EFR may not be meaningful. The metric is most useful for tracking convergence within a single algorithm: as regret approaches zero, the algorithm approaches equilibrium.
+
+\subsection{Metric Selection by Game Type}
+
+The appropriate primary convergence metric depends on whether the game is zero-sum or general-sum:
+
+\begin{itemize}
+    \item \textbf{Zero-sum games:} The theoretically appropriate metric is \emph{exploitability}, which measures how much utility a best-response opponent could extract. However, computing exploitability is computationally expensive, so we primarily track policy delta and policy variance as proxy measures for convergence.
+    
+    \item \textbf{General-sum games:} Regret is the natural metric, as players seek strategies that minimize their individual regret. We track aggregate average regret along with social welfare to understand both individual optimality and collective efficiency.
+\end{itemize}
+
+In practice, we track all metrics for all games to gain a comprehensive view of convergence behavior, but we emphasize different metrics depending on the game type when drawing conclusions.
+
+
+
+
+\end{document}
