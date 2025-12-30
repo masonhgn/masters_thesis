@@ -635,22 +635,24 @@ def plot_metrics(metrics, algo_name, output_dir):
 def save_experiment(save_params, base_dir='output'):
     """
     Save experiment results to a new directory with JSON and CSV files.
-    
+
     Args:
         metrics: dictionary of metrics
         num_iterations: number of iterations run
         game_params: dictionary of game parameters
         base_dir: base directory for all experiments
-    
+
     Returns:
         experiment_dir: path to the created experiment directory
     """
     import datetime
     import os
-    
+
     # Create unique experiment directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_dir, f"{save_params['algo_metadata']['algo_name']}_experiment_{timestamp}")
+    # replace spaces with underscores in algo name for clean filenames
+    algo_name_clean = save_params['algo_metadata']['algo_name'].replace(' ', '_')
+    experiment_dir = os.path.join(base_dir, f"{algo_name_clean}_experiment_{timestamp}")
     os.makedirs(experiment_dir, exist_ok=True)
     
     # Save both JSON and CSV
@@ -989,13 +991,13 @@ if __name__ == "__main__":
 
     run_mccfr(
         params={
-        'num_iterations': 20000,
+        'num_iterations': 10000,
         'checkpoint_interval': 100,
         'num_ev_samples': 10,
-        "max_turns": 10,
-        "max_num_instances": 100,
+        "max_turns": 2,
+        "max_num_instances": 3,
         "discount": 1.0,
-        "prob_end": 0.1,
+        "prob_end": 0.0,
         "random_seed": 42,
         }
     )
