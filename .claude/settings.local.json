@@ -4,7 +4,9 @@
       "Bash(dir:*)",
       "Bash(chmod:*)",
       "Bash(./open_spiel-private/build.Release/bin/ltbr/run_corr_dist:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(tree:*)",
+      "Bash(du -sh:*)"
     ],
     "deny": [],
     "ask": []
