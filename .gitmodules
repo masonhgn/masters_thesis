@@ -1,0 +1,6 @@
+[submodule "open_spiel"]
+	path = open_spiel
+	url = git@github.com:masonhgn/open_spiel.git
+[submodule "open_spiel-private"]
+	path = open_spiel-private
+	url = git@github.com:masonhgn/open_spiel-private.git
