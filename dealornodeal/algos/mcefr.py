@@ -5,8 +5,12 @@
 mcefr combines efr's deviation-based regret minimization with mccfr's sampling
 approach for improved efficiency on large games.
 
+supports both external and internal sampling:
+- external sampling: samples opponent actions, iterates over player's actions
+- internal sampling: samples all actions (player and opponent)
+
 one iteration of mcefr consists of:
-1) for each player, sample a trajectory using external sampling
+1) for each player, sample a trajectory using the specified sampling mode
 2) compute deviation-based regrets along the sampled path
 3) update strategy using efr's regret matching
 """
@@ -89,10 +93,10 @@ class AveragePolicy(policy.Policy):
 class MCEFRSolver(object):
     """monte carlo extensive-form regret minimization solver.
 
-    implements external sampling mcefr with various deviation types.
+    implements external and internal sampling mcefr with various deviation types.
     """
 
-    def __init__(self, game, deviation_name):
+    def __init__(self, game, deviation_name, sampling_mode="external"):
         """initializer.
 
         args:
@@ -102,14 +106,22 @@ class MCEFRSolver(object):
                 "informed counterfactual", "blind partial sequence",
                 "counterfactual partial sequence", "casual partial sequence",
                 "twice informed partial sequence", "single target behavioural"
+            sampling_mode: "external" or "internal" sampling.
+                external: samples opponent actions, iterates over player's actions
+                internal: samples all actions (player and opponent)
         """
         assert game.get_type().dynamics == pyspiel.GameType.Dynamics.SEQUENTIAL, (
             "mcefr requires sequential games."
         )
 
+        assert sampling_mode in ["external", "internal"], (
+            f"sampling_mode must be 'external' or 'internal', got '{sampling_mode}'"
+        )
+
         self._game = game
         self._num_players = game.num_players()
         self._root_node = self._game.new_initial_state()
+        self._sampling_mode = sampling_mode
 
         # map from info state string to _InfoStateNode
         self._infostates = {}
@@ -146,7 +158,7 @@ class MCEFRSolver(object):
             raise ValueError(f"unsupported deviation type: {deviation_name}")
 
     def iteration(self):
-        """performs one iteration of external sampling mcefr.
+        """performs one iteration of mcefr (external or internal sampling).
 
         an iteration consists of one episode for each player as the update player.
         """
@@ -165,7 +177,8 @@ class MCEFRSolver(object):
                 history,
                 history_info_states,
                 history_legal_actions,
-                reach_probs=np.ones(self._num_players + 1)
+                reach_probs=np.ones(self._num_players + 1),
+                sample_reach=1.0
             )
 
         # update strategies for all visited info states using y-values
@@ -270,10 +283,12 @@ class MCEFRSolver(object):
             # uniform policy if no positive regrets
             return np.ones(num_actions, dtype=np.float64) / num_actions
 
-    def _update_regrets(self, state, player, history, history_info_states, history_legal_actions, reach_probs):
-        """runs external sampling episode and updates regrets.
+    def _update_regrets(self, state, player, history, history_info_states, history_legal_actions, reach_probs, sample_reach):
+        """runs sampling episode and updates regrets.
 
-        uses external sampling: samples opponent actions, iterates over our actions.
+        supports both external and internal sampling modes.
+        external sampling: samples opponent actions, iterates over player's actions
+        internal sampling: samples all actions (player and opponent)
 
         args:
             state: current game state
@@ -282,6 +297,7 @@ class MCEFRSolver(object):
             history_info_states: dict mapping player_id -> list of info_state_keys
             history_legal_actions: dict mapping player_id -> list of legal_actions at prior states
             reach_probs: array of reach probabilities [p0, p1, ..., chance]
+            sample_reach: reach probability under sampling distribution
 
         returns:
             value for the updating player
@@ -293,10 +309,12 @@ class MCEFRSolver(object):
             # sample chance outcome
             outcomes, probs = zip(*state.chance_outcomes())
             outcome = np.random.choice(outcomes, p=probs)
+            outcome_idx = outcomes.index(outcome)
             new_reach_probs = reach_probs.copy()
-            new_reach_probs[-1] *= probs[outcomes.index(outcome)]
+            new_reach_probs[-1] *= probs[outcome_idx]
+            new_sample_reach = sample_reach * probs[outcome_idx]
             return self._update_regrets(
-                state.child(outcome), player, history, history_info_states, history_legal_actions, new_reach_probs
+                state.child(outcome), player, history, history_info_states, history_legal_actions, new_reach_probs, new_sample_reach
             )
 
         current_player = state.current_player()
@@ -350,6 +368,7 @@ class MCEFRSolver(object):
 
             new_reach_probs = reach_probs.copy()
             new_reach_probs[current_player] *= policy_array[action_idx]
+            new_sample_reach = sample_reach * policy_array[action_idx]
 
             value = self._update_regrets(
                 state.child(legal_actions[action_idx]),
@@ -357,20 +376,59 @@ class MCEFRSolver(object):
                 new_history,
                 new_history_info_states,
                 new_history_legal_actions,
-                new_reach_probs
+                new_reach_probs,
+                new_sample_reach
             )
 
             # update average policy (simple averaging at opponent nodes)
-            # CRITICAL: must update ALL actions, not just the sampled one
+            # must update ALL actions, not just the sampled one
             # this matches mccfr external sampling simple averaging
             for action_idx_avg in range(num_actions):
                 info_state_node.cumulative_policy[action_idx_avg] += policy_array[action_idx_avg]
 
         else:
-            # our node: iterate over all actions (needed for deviation regrets)
-            for action_idx in range(num_actions):
+            # updating player's node
+            if self._sampling_mode == "external":
+                # external sampling: iterate over all actions
+                for action_idx in range(num_actions):
+                    new_history = copy.deepcopy(history)
+                    new_history[current_player].append(legal_actions[action_idx])
+
+                    # track info state history
+                    new_history_info_states = copy.deepcopy(history_info_states)
+                    new_history_info_states[current_player].append(info_state_key)
+
+                    # track legal actions at this state
+                    new_history_legal_actions = copy.deepcopy(history_legal_actions)
+                    new_history_legal_actions[current_player].append(legal_actions)
+
+                    new_reach_probs = reach_probs.copy()
+                    new_reach_probs[current_player] *= policy_array[action_idx]
+
+                    child_values[action_idx] = self._update_regrets(
+                        state.child(legal_actions[action_idx]),
+                        player,
+                        new_history,
+                        new_history_info_states,
+                        new_history_legal_actions,
+                        new_reach_probs,
+                        sample_reach
+                    )
+                    value += policy_array[action_idx] * child_values[action_idx]
+
+                # update average policy
+                reach_prob = reach_probs[current_player]
+                for action_idx in range(num_actions):
+                    info_state_node.cumulative_policy[action_idx] += (
+                        reach_prob * policy_array[action_idx]
+                    )
+
+            else:  # internal sampling
+                # sample ONE action at updating player's node
+                sampled_action_idx = np.random.choice(np.arange(num_actions), p=policy_array)
+
                 new_history = copy.deepcopy(history)
-                new_history[current_player].append(legal_actions[action_idx])
+                new_history[current_player].append(legal_actions[sampled_action_idx])
 
                 # track info state history
                 new_history_info_states = copy.deepcopy(history_info_states)
@@ -381,19 +439,38 @@ class MCEFRSolver(object):
                 new_history_legal_actions[current_player].append(legal_actions)
 
                 new_reach_probs = reach_probs.copy()
-                new_reach_probs[current_player] *= policy_array[action_idx]
+                new_reach_probs[current_player] *= policy_array[sampled_action_idx]
+                new_sample_reach = sample_reach * policy_array[sampled_action_idx]
 
-                child_values[action_idx] = self._update_regrets(
-                    state.child(legal_actions[action_idx]),
+                # compute value for sampled action
+                sampled_value = self._update_regrets(
+                    state.child(legal_actions[sampled_action_idx]),
                     player,
                     new_history,
                     new_history_info_states,
                     new_history_legal_actions,
-                    new_reach_probs
+                    new_reach_probs,
+                    new_sample_reach
                 )
-                value += policy_array[action_idx] * child_values[action_idx]
 
-            # update deviation regrets
+                # use importance sampling to estimate child values
+                # for sampled action: use actual value
+                # for other actions: use baseline (0 for vanilla internal sampling)
+                child_values[sampled_action_idx] = sampled_value
+                # other values remain 0 (baseline)
+
+                value = sampled_value
+
+                # update average policy with importance sampling correction
+                reach_prob = reach_probs[current_player]
+                for action_idx in range(num_actions):
+                    if action_idx == sampled_action_idx:
+                        # importance sampling weight for average policy
+                        info_state_node.cumulative_policy[action_idx] += (
+                            reach_prob * policy_array[action_idx] / sample_reach
+                        )
+
+            # update deviation regrets (for both external and internal)
             self._update_deviation_regrets(
                 info_state_node,
                 info_state_key,
@@ -402,22 +479,16 @@ class MCEFRSolver(object):
                 policy_array,
                 reach_probs,
                 current_player,
-                history_info_states
+                history_info_states,
+                sample_reach
             )
-
-            # update average policy
-            reach_prob = reach_probs[current_player]
-            for action_idx in range(num_actions):
-                info_state_node.cumulative_policy[action_idx] += (
-                    reach_prob * policy_array[action_idx]
-                )
 
         return value
 
     def _update_deviation_regrets(
         self, info_state_node, info_state_key, child_values,
         state_value, policy_array, reach_probs, current_player,
-        history_info_states
+        history_info_states, sample_reach
     ):
         """updates cumulative regrets for all deviations at this info state.
 
@@ -430,6 +501,7 @@ class MCEFRSolver(object):
             reach_probs: reach probabilities
             current_player: current player
             history_info_states: dict mapping player -> list of info_state_keys
+            sample_reach: reach probability under sampling distribution
         """
         # compute counterfactual reach probability
         counterfactual_reach_prob = (
@@ -469,9 +541,16 @@ class MCEFRSolver(object):
             )
 
             # compute regret for this deviation
-            deviation_regret = memory_reach_prob * (
-                counterfactual_reach_prob * (deviation_value - state_value)
-            )
+            if self._sampling_mode == "internal":
+                # importance sampling correction for internal sampling
+                deviation_regret = memory_reach_prob * (
+                    counterfactual_reach_prob * (deviation_value - state_value) / sample_reach
+                )
+            else:
+                # external sampling: no sample_reach correction needed
+                deviation_regret = memory_reach_prob * (
+                    counterfactual_reach_prob * (deviation_value - state_value)
+                )
 
             # accumulate regret
             info_state_node.cumulative_regret[deviation_idx] += deviation_regret

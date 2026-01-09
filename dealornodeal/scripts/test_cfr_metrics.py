@@ -15,6 +15,7 @@ import games.deal_or_no_deal as deal_or_no_deal
 import random
 
 
+
 def compute_policy_delta(game, solver, prev_values):
     """
     compute measure of strategy change using expected value changes.

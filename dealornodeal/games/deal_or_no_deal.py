@@ -346,7 +346,8 @@ class DealOrNoDealState(pyspiel.State):
         offset += 1
 
         # how many trade offers have happened? (one-hot encoding)
-        values[offset + len(self._offers)] = 1.0
+        # note: c++ uses absolute indexing here, not offset-based
+        values[len(self._offers)] = 1.0
         offset += self._max_turns + 1
 
         # pool (thermometer encoding)
@@ -393,7 +394,8 @@ class DealOrNoDealState(pyspiel.State):
         offset += 1
 
         # how many trade offers have happened? (one-hot encoding)
-        values[offset + len(self._offers)] = 1.0
+        # note: c++ uses absolute indexing here, not offset-based
+        values[len(self._offers)] = 1.0
         offset += self._max_turns + 1
 
         # pool (thermometer encoding)
@@ -487,14 +489,26 @@ class DealOrNoDealGame(pyspiel.Game):
 
     def _create_offers(self):
         """generate all possible offers up to pool_max items per type"""
+        # match c++ offer generation order (increment index 0 first, then 1, then 2)
         self.all_offers = []
-        # generate all combinations of items from 0 to _POOL_MAX_NUM_ITEMS
-        for i0 in range(_POOL_MAX_NUM_ITEMS + 1):
-            for i1 in range(_POOL_MAX_NUM_ITEMS + 1):
-                for i2 in range(_POOL_MAX_NUM_ITEMS + 1):
-                    # only include offers with total items <= pool max
-                    if i0 + i1 + i2 <= _POOL_MAX_NUM_ITEMS:
-                        self.all_offers.append([i0, i1, i2])
+        cur_offer = [0, 0, 0]
+        done = False
+
+        while not done:
+            # add offer if total <= pool max
+            if sum(cur_offer) <= _POOL_MAX_NUM_ITEMS:
+                self.all_offers.append(cur_offer[:])  # copy the list
+
+            # increment leftmost digit first (matching c++ behavior)
+            done = True
+            for i in range(_NUM_ITEM_TYPES):
+                if cur_offer[i] < _POOL_MAX_NUM_ITEMS:
+                    done = False
+                    cur_offer[i] += 1
+                    # reset all indices to the left
+                    for j in range(i):
+                        cur_offer[j] = 0
+                    break
 
     def _load_instances(self):
         """load game instances from file"""

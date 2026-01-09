@@ -10,9 +10,34 @@ equilibrium_groups = {
     "AFCCE": ["afcce_cfr.txt", "afcce_efr_act.txt"],
     "AFCE": ["afce_cfr.txt", "afce_efr_act_in.txt"],
     "EFCCE": ["efcce_cfr.txt", "efcce_efr_bhv.txt", "efcce_efr_csps.txt", "efcce_efr_tips.txt"],
-    "EFCE": ["efce_cfr.txt", "efce_efr_cfps_in.txt", "efce_efr_tips_in.txt"],
+    "EFCE": ["efce_cfr.txt", "efce_cfr_in.txt", "efce_efr_cfps_in.txt", "efce_efr_tips_in.txt", "efce_efr_csps_in.txt", "efce_efr_bhv_in.txt"],
     "Zero-Sum": ["zerosum_cfr_cce.txt", "zerosum_cfr_ce.txt"]
 }
+
+def format_algorithm_name(algorithm_name):
+    """
+    format algorithm name to explicitly label external vs internal sampling.
+
+    if the algorithm name doesn't contain '_in', add '(external)' suffix.
+    if it contains '_in', replace '_in' with '(internal)'.
+    """
+    # check if this is an internal sampling algorithm
+    if '_in' in algorithm_name:
+        # replace _in with (internal)
+        return algorithm_name.replace('_in', ' (internal)')
+    else:
+        # for external sampling, add (external) label
+        # but skip CFR since it's the baseline
+        if algorithm_name.startswith('CFR '):
+            return algorithm_name
+        else:
+            # split on first space to insert (external) after algorithm name
+            parts = algorithm_name.split(' ', 1)
+            if len(parts) == 2:
+                return f"{parts[0]} (external) {parts[1]}"
+            else:
+                return f"{algorithm_name} (external)"
+    return algorithm_name
 
 def read_convergence_file(filepath):
     """
@@ -61,9 +86,12 @@ def plot_equilibrium_group(equilibrium_name, file_list, output_dir):
 
         algorithm_name, iterations, distances = read_convergence_file(filepath)
 
+        # format the algorithm name to show external/internal explicitly
+        formatted_name = format_algorithm_name(algorithm_name)
+
         # plot this algorithm's convergence
         plt.plot(iterations, distances, marker='o', markersize=2,
-                 label=algorithm_name, linewidth=1)
+                 label=formatted_name, linewidth=1)
 
     plt.yscale('log')
     plt.xlabel('Iterations', fontsize=12)

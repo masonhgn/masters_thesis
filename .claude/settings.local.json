@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(chmod:*)",
+      "Bash(./open_spiel-private/build.Release/bin/ltbr/run_corr_dist:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
