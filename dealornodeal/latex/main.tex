@@ -26,26 +26,26 @@ Our goal is to address the following:
     \item How does \textit{Deal or No Deal} behave when solved with CFR, EFR, and MCCFR, MCEFR?
     \item What does convergence look like for different algorithms and versions of the game?
     \item What kinds of policies do these algorithms converge to?
-    \item Bigger picture question: How can we effectively learn to a strong equilibrium when facing a situation with a huge game tree like this?
+    \item Bigger picture question: How can we effectively learn a strong equilibrium when facing a situation with a huge game tree like this?
 \end{enumerate}
 
 \subsection*{Game Variants}
 
-We start by defining the original game implementation and several related versions that differ in size and type.
+We start by defining the original game implementation and several related versions that differ in number of turns.
 
-Parameters are defined as:
-\[
-(\text{max\_turns},~\text{num\_item\_types},~\text{max\_single\_item\_utility})
-\]
+% Parameters are defined as:
+% \[
+% (\text{max\_turns},~\text{max\_single\_item\_utility})
+% \]
 
 \begin{table}[H]
 \centering
 \begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{Implementation Name} & \textbf{Property} & \textbf{Parameters} \\
+\textbf{Implementation Name} & \textbf{Item Types}\\
 \midrule
-Original-Full   & general sum & (10, 3, 10) \\
-Original-Mini   & general sum & (3, 1, 1)   \\
+Original-Full   & 10 \\
+Original-Mini   & 2   \\
 \bottomrule
 \end{tabular}
 \caption*{Table 1: Implementations of the \textit{Deal or No Deal} game with varying scale and type.}
@@ -57,8 +57,8 @@ We compare the cumulative regret across different algorithms: CFR, EFR (TIPS), E
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.8\textwidth]{../output/combined_cumulative_regret.png}
-\caption*{Figure 1: Combined cumulative regret comparison across CFR, EFR (TIPS), EFR (CSPS), and MCCFR algorithms.}
+\includegraphics[width=0.8\textwidth]{plots/combined_cumulative_regret.png}
+\caption*{Figure 1: Combined cumulative regret comparison across CFR, EFR--TIPS), and EFR--CSPS.}
 \end{figure}
 
 The convergence analysis reveals distinct performance characteristics across algorithms. EFR (TIPS) achieves the fastest convergence to low regret, reaching a final cumulative regret of 0.0067 after 1,000 iterations. Standard CFR follows as the second-best performer with a final regret of 0.0097, demonstrating strong convergence despite its simpler regret-matching mechanism. EFR (CSPS) converges more slowly, achieving a final regret of 0.0117. The Monte Carlo CFR variant, while computationally efficient, exhibits significantly higher regret (1.49) due to the variance introduced by sampling, making it less suitable for this game size where exact computation remains tractable.
@@ -69,34 +69,34 @@ While convergence quality is important, computational cost is equally critical f
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.8\textwidth]{../output/wall_clock_comparison.png}
+\includegraphics[width=0.8\textwidth]{plots/wall_clock_comparison.png}
 \caption*{Figure 2: Wall clock time comparison for 1,000 iterations across all algorithms.}
 \end{figure}
 
-The computational costs vary dramatically across algorithms. Standard CFR completes 1,000 iterations in 36.05 seconds, providing an excellent balance between convergence quality and speed. Monte Carlo CFR is extremely fast at 0.57 seconds, achieving a 63× speedup over CFR, though at the cost of convergence quality. The EFR variants are significantly more expensive: EFR (TIPS) requires 470.55 seconds (13× slower than CFR) and EFR (CSPS) requires 526.93 seconds (15× slower than CFR). This substantial computational overhead is due to EFR's more complex regret tracking over deviation types rather than individual actions. For this game size, CFR offers the best trade-off between convergence speed and computational efficiency.
+The computational costs vary dramatically across algorithms. Standard CFR completes 1,000 iterations in 36.05 seconds, providing an excellent balance between convergence quality and speed. Monte Carlo CFR is extremely fast at 0.57 seconds, achieving a 63x speedup over CFR, though at the cost of convergence quality. The EFR variants are significantly more expensive: EFR (TIPS) requires 470.55 seconds (13x slower than CFR) and EFR (CSPS) requires 526.93 seconds (15x slower than CFR). This substantial computational overhead is due to EFR's more complex regret tracking over deviation types rather than individual actions. For this game size, CFR offers the best trade-off between convergence speed and computational efficiency.
 
 \subsection*{Policy Evolution Dynamics}
 
-Beyond measuring convergence through regret, we examine how the policies themselves evolve during training. Figure 3 shows the policy delta—the L2 norm of the change in expected values between consecutive checkpoints—for each algorithm.
+Beyond measuring convergence through regret, we examine how the policies themselves evolve during training. Figure 3 shows the policy delta, which is the L2 norm of the change in expected values between consecutive checkpoints for each algorithm.
 
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/cfr_experiment_20251117_153225/policy_delta.png}
+  \includegraphics[width=\linewidth]{plots/policy_delta/policy_delta_cfr.png}
   \caption{CFR}
 \end{subfigure}
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/efr_tips_experiment_20251117_235453/policy_delta.png}
+  \includegraphics[width=\linewidth]{plots/policy_delta/policy_delta_tips.png}
   \caption{EFR (TIPS)}
 \end{subfigure}
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/efr_csps_experiment_20251118_001551/policy_delta.png}
+  \includegraphics[width=\linewidth]{plots/policy_delta/policy_delta_csps.png}
   \caption{EFR (CSPS)}
 \end{subfigure}
 \caption*{Figure 3: Policy delta over iterations for CFR, EFR (TIPS), and EFR (CSPS).}
 \end{figure}
 
-A striking observation across all three algorithms is that policy delta does not converge smoothly to zero. Instead, the policies continue to evolve in an almost cyclical manner throughout training, with periodic spikes in policy change even after many iterations. This behavior suggests that while the average policies are converging toward equilibrium (as evidenced by decreasing regret), the instantaneous policies oscillate between different strategic configurations. This oscillatory behavior is characteristic of regret minimization algorithms in general-sum games, where the space of near-optimal strategies may form a connected manifold rather than a single fixed point. The persistence of these oscillations indicates that the algorithms are exploring different equilibria or near-equilibria within the solution space.
+An interesting observation across all three algorithms is that policy delta does not converge smoothly to zero. Instead, the policies continue to evolve in an almost cyclical manner throughout training, with periodic spikes in policy change even after many iterations. This behavior suggests that while the average policies are converging toward equilibrium (as evidenced by decreasing regret), the instantaneous policies continue to oscillate. This behavior is characteristic of regret minimization algorithms in general-sum games, where the space of near-optimal strategies may form a connected manifold rather than a single fixed point. The persistence of these oscillations indicates that the algorithms are exploring different equilibria or near-equilibria within the solution space.
 
 \subsection*{Player Payoff Asymmetry}
 
@@ -105,15 +105,15 @@ Figure 4 shows the expected values for both players under the average policy as 
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/cfr_experiment_20251117_153225/expected_values.png}
+  \includegraphics[width=\linewidth]{plots/expected_values/expected_values_cfr.png}
   \caption{CFR}
 \end{subfigure}
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/efr_tips_experiment_20251117_235453/expected_values.png}
+  \includegraphics[width=\linewidth]{plots/expected_values/expected_values_csps.png}
   \caption{EFR (TIPS)}
 \end{subfigure}
 \begin{subfigure}{0.32\textwidth}
-  \includegraphics[width=\linewidth]{../output/efr_csps_experiment_20251118_001551/expected_values.png}
+  \includegraphics[width=\linewidth]{plots/expected_values/expected_values_tips.png}
   \caption{EFR (CSPS)}
 \end{subfigure}
 \caption*{Figure 4: Expected values for both players over iterations for CFR, EFR (TIPS), and EFR (CSPS).}
@@ -128,17 +128,21 @@ To understand how game length affects the player asymmetry, we examined CFR conv
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{../output/extra/cfr_experiment_3turn/expected_values.png}
+  \includegraphics[width=\linewidth]{plots/expected_values/expected_values_3turn.png}
   \caption{CFR on 3-turn game}
 \end{subfigure}
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{../output/extra/cfr_experiment_4turn/expected_values.png}
+  \includegraphics[width=\linewidth]{plots/expected_values/expected_values_4turn.png}
   \caption{CFR on 4-turn game}
 \end{subfigure}
 \caption*{Figure 5: Expected values for players in extended game variants with 3 and 4 turns.}
 \end{figure}
 
-A remarkable pattern emerges: the player asymmetry not only diminishes but actually \textit{reverses} as the game lengthens. In the 3-turn variant, Player 1 gains the advantage with expected value around 8.27 compared to Player 0's 5.4—a complete flip from the 2-turn game. By the 4-turn variant, the payoffs become nearly balanced, with Player 0 at 8.07 and Player 1 at 7.4. This suggests that the first-mover advantage in shorter games transforms into a last-mover advantage in longer games, likely because additional negotiation rounds give the second player more opportunities to respond to and counter the first player's proposals. The convergence toward equity in longer games indicates that the asymmetry is a function of strategic depth rather than an intrinsic bias in the game mechanics.
+An interesting pattern is clear: the player asymmetry not only diminishes but actually \textit{reverses} as the game lengthens. In the 3-turn variant, Player 1 gains the advantage with expected value around 8.27 compared to Player 0's 5.4, a complete flip from the 2-turn game. By the 4-turn variant, the payoffs become nearly balanced, with Player 0 at 8.07 and Player 1 at 7.4. This suggests that the first-mover advantage in shorter games transforms into a last-mover advantage in longer games, likely because additional negotiation rounds give the second player more opportunities to respond to and counter the first player's proposals. The convergence toward equity in longer games indicates that the asymmetry is a function of strategic depth rather than an intrinsic bias in the game mechanics.
+
+
+
+
 
 
 
@@ -153,9 +157,37 @@ A remarkable pattern emerges: the player asymmetry not only diminishes but actua
 
 We track several metrics to evaluate the convergence behavior of different regret minimization algorithms across different game variants. These metrics provide complementary views of convergence: some measure strategic stability, others measure performance, and some capture the theoretical guarantees of regret minimization.
 
+
+
+
+\subsection{Nash Convergence (NashConv)}
+
+Nash Convergence measures the exploitability of a strategy profile by quantifying how much players could improve by deviating to a best response:
+
+\begin{equation}
+\text{NashConv}(\pi) = \sum_{i=0}^{N-1} \left[ v_i(\pi_i^*, \pi_{-i}) - v_i(\pi_i, \pi_{-i}) \right]
+\end{equation}
+
+where $\pi_i^*$ is player $i$'s best response against $\pi_{-i}$ (the strategies of all other players), and $v_i$ denotes player $i$'s expected value.
+
+\textbf{Intuition:} NashConv measures how much utility players are "leaving on the table" by not best-responding. At Nash equilibrium, no player can improve unilaterally, so NashConv equals zero. Larger values indicate greater distance from equilibrium.
+
+\textbf{NOTE: This applies only to the zero sum version of the game.}
+
+
+
+
+
+
 \subsection{Policy Delta}
 
-Policy delta measures the rate of change in expected values between consecutive checkpoint iterations:
+\amy{TODO}
+
+
+
+\subsection{Value Delta}
+
+Value delta measures the rate of change in expected values between consecutive checkpoint iterations:
 
 \begin{equation}
 \delta_t = \sqrt{(v_0^t - v_0^{t-1})^2 + (v_1^t - v_1^{t-1})^2}
@@ -235,12 +267,141 @@ For each information state, we take the maximum positive regret across all actio
 The appropriate primary convergence metric depends on whether the game is zero-sum or general-sum:
 
 \begin{itemize}
-    \item \textbf{Zero-sum games:} The theoretically appropriate metric is \emph{exploitability}, which measures how much utility a best-response opponent could extract. However, computing exploitability is computationally expensive, so we primarily track policy delta and policy variance as proxy measures for convergence.
+    \item \textbf{Zero-sum games:} The theoretically appropriate metric is \emph{exploitability}, which measures how much utility a best-response opponent could extract. However, computing exploitability is computationally expensive (and seemingly impossible for general sum games in openspiel), so we primarily track policy delta and policy variance as measures for convergence.
     
     \item \textbf{General-sum games:} Regret is the natural metric, as players seek strategies that minimize their individual regret. We track aggregate average regret along with social welfare to understand both individual optimality and collective efficiency.
 \end{itemize}
 
-In practice, we track all metrics for all games to gain a comprehensive view of convergence behavior, but we emphasize different metrics depending on the game type when drawing conclusions.
+In practice, we care about the general sum game as the zero sum version is just for testing the initial implementation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\newpage
+
+\section{Equilibrium Distance Analysis}
+
+To evaluate the relative performance of different regret minimization algorithms on various equilibrium concepts, we conducted experiments measuring the distance to different types of equilibria. These experiments help us understand which algorithms are best suited for computing specific equilibrium refinements in extensive-form games.
+
+\subsection{Equilibrium Concepts}
+
+We evaluate algorithms on their ability to minimize distance to five different equilibrium concepts:
+
+\begin{itemize}
+    \item \textbf{AFCCE (Agent-Form Coarse Correlated Equilibrium):} A coarse correlated equilibrium concept where deviations are evaluated at the start of the game.
+
+    \item \textbf{AFCE (Agent-Form Correlated Equilibrium):} A refined correlated equilibrium where deviations consider more granular decision points than AFCCE.
+
+    \item \textbf{EFCCE (Extensive-Form Coarse Correlated Equilibrium):} An extensive-form generalization of coarse correlated equilibrium that considers the sequential structure of the game.
+
+    \item \textbf{EFCE (Extensive-Form Correlated Equilibrium):} A stronger equilibrium concept than EFCCE, requiring incentive compatibility at all decision points in the extensive form.
+
+    \item \textbf{Zero-sum CE/CCE:} Correlated equilibrium and coarse correlated equilibrium distances measured on a zero-sum variant of the game, where the theoretical guarantees of CFR are strongest.
+\end{itemize}
+
+\subsection{Hypotheses}
+
+Based on theoretical properties of the algorithms and their regret-tracking mechanisms, the following hypotheses were formulated:
+
+\begin{enumerate}
+    \item \textbf{Zero-sum performance:} CFR and all EFR variants should achieve low CCE and CE distance in the zero-sum version of the game, as this setting aligns with their theoretical guarantees.
+
+    \item \textbf{AFCCE:} EFR with action-level deviations (external regret) should demonstrate the lowest AFCCE distance.
+
+    \item \textbf{AFCE:} EFR with action-level deviations using internal regret should demonstrate the lowest AFCE distance.
+
+    \item \textbf{EFCCE ordering:} For extensive-form coarse correlated equilibrium, the expected performance ordering should be EFR(BHV) $>$ EFR(TIPS) $>$ EFR(CSPS) $>$ CFR, where EFR(BHV) achieves the best performance but at the highest computational cost.
+
+    \item \textbf{EFCE ordering:} For extensive-form correlated equilibrium with internal regret, the expected ordering should be EFR(TIPS) $>$ EFR(CSPS) $>$ CFR.
+\end{enumerate}
+
+\subsection{Experimental Results}
+
+We ran each algorithm for 1,000 iterations and measured the distance to each equilibrium concept at regular intervals. The results are summarized below, ordered from best (lowest distance) to worst (highest distance) for each equilibrium type:
+
+\begin{itemize}
+    \item \textbf{AFCCE:} EFR(Action) $>$ CFR
+    \item \textbf{AFCE:} EFR(Action, Internal) $>$ CFR
+    \item \textbf{EFCCE:} EFR(CSPS) $>$ EFR(BHV) $>$ EFR(TIPS) $>$ CFR
+    \item \textbf{EFCE:} EFR(TIPS) $>$ EFR(CFPS) $>$ CFR
+    \item \textbf{Zero-sum:} CFR CCE $\approx$ CFR CE
+\end{itemize}
+
+Figure 6 presents the convergence curves for each equilibrium concept, showing how the distance to equilibrium decreases over iterations for each algorithm.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{plots/eq_plots/afcce_convergence.png}
+  \caption{AFCCE convergence}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{plots/eq_plots/afce_convergence.png}
+  \caption{AFCE convergence}
+\end{subfigure}
+
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{plots/eq_plots/efcce_convergence.png}
+  \caption{EFCCE convergence}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{plots/eq_plots/efce_convergence.png}
+  \caption{EFCE convergence}
+\end{subfigure}
+
+\begin{subfigure}{0.48\textwidth}
+  \includegraphics[width=\linewidth]{plots/eq_plots/zero_sum_convergence.png}
+  \caption{Zero-sum CE and CCE convergence}
+\end{subfigure}
+\caption*{Figure 6: Convergence to different equilibrium concepts across algorithms. The y-axis uses logarithmic scale to better visualize differences in convergence rates.}
+\end{figure}
+
+\subsection{Analysis}
+
+The experimental results mostly confirm the theoretical predictions, with some notable observations:
+
+\textbf{Confirmed hypotheses:}
+\begin{itemize}
+    \item The zero-sum experiments confirm that CFR performs well on both CE and CCE distances, with CFR CCE slightly outperforming CFR CE as expected.
+
+    \item EFR(Action) achieves the best performance on AFCCE distance, validating the hypothesis that action-level external regret minimization is well-suited for this equilibrium concept.
+
+    \item EFR(Action, Internal) demonstrates superior performance on AFCE distance compared to CFR, confirming that internal regret tracking benefits this equilibrium refinement.
+
+    \item For EFCE, EFR(TIPS) achieves the best performance as predicted, followed by EFR(CFPS) and then CFR.
+\end{itemize}
+
+\textbf{Interesting observations:}
+\begin{itemize}
+    \item The EFCCE results show that all EFR variants outperform CFR, which aligns with theoretical expectations. However, the ordering among EFR variants differs from the hypothesis. EFR(CSPS) achieves the best performance, followed by EFR(BHV), then EFR(TIPS). This could mean that for this particular game structure, the CSPS deviation set provides the most appropriate granularity for minimizing EFCCE distance.
+
+    \item The performance advantage of EFR(BHV) was not apparent for EFCCE in this game. This highlights the importance of matching the deviation set to the specific equilibrium concept and game structure.
+
+    \item All algorithms show smooth convergence on logarithmic scale, with exponential decay in equilibrium distance over iterations, which is characteristic of regret minimization algorithms approaching equilibrium.
+\end{itemize}
+
+what do we think of these results (?)
+
+
+
+
+
+
+
+
 
 
 

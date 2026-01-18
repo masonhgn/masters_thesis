@@ -7,7 +7,7 @@
 
 # configuration
 EXECUTABLE="./open_spiel-private/build.Release/bin/ltbr/run_corr_dist"
-ITERATIONS=1000
+ITERATIONS=10
 REPORT_INTERVAL=20
 NUM_SAMPLES=100  # reduced for memory efficiency
 SAMPLER="external"  # use external sampling for speed

@@ -1,0 +1,23 @@
+experiment_summary
+algorithm,EFR_ACT_in
+equilibrium,AFCE
+iterations,10
+num_samples,100
+sample_frequency,10
+
+timing_breakdown_ms
+cfr_update,1.30086
+policy_extraction,1.2695
+sampling,4.88703,1 calls
+get_corr_dev,23.0262
+reset,0,0 calls
+distance_calc,6121.48,10 calls
+total_experiment,6161.26
+
+percentages
+cfr_update,0.0211135%
+policy_extraction,0.0206045%
+sampling,0.0793186%
+get_corr_dev,0.373725%
+reset,0%
+distance_calc,99.3544%

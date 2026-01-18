@@ -1,0 +1,23 @@
+experiment_summary
+algorithm,EFR_CFPS_in
+equilibrium,EFCE
+iterations,10
+num_samples,100
+sample_frequency,10
+
+timing_breakdown_ms
+cfr_update,0.930244
+policy_extraction,1.31309
+sampling,4.85232,1 calls
+get_corr_dev,23.0687
+reset,0,0 calls
+distance_calc,5046.12,10 calls
+total_experiment,5084.9
+
+percentages
+cfr_update,0.0182943%
+policy_extraction,0.0258233%
+sampling,0.0954261%
+get_corr_dev,0.453672%
+reset,0%
+distance_calc,99.2375%
