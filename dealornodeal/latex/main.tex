@@ -395,6 +395,111 @@ The experimental results mostly confirm the theoretical predictions, with some n
 
 what do we think of these results (?)
 
+\subsection{Computational Profiling}
+
+To understand the computational bottlenecks in equilibrium distance computation, we profiled the runtime of each experiment. Table \ref{tab:total_time} shows the total wall-clock time for 10 iterations of each algorithm-equilibrium combination, while Tables \ref{tab:afcce_breakdown}--\ref{tab:efce_breakdown} break down the percentage of time spent in each major function.
+
+\begin{table}[H]
+\centering
+\caption{Total experiment time (seconds) for 10 iterations}
+\label{tab:total_time}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm & AFCCE & AFCE & EFCCE & EFCE \\
+\midrule
+CFR & 9.64 & 6.22 & 7.48 & 4.96 \\
+CFR\_in & -- & -- & -- & 5.01 \\
+EFR\_ACT & 9.63 & -- & -- & -- \\
+EFR\_ACT\_in & -- & 6.16 & -- & -- \\
+EFR\_BHV & -- & -- & 7.32 & -- \\
+EFR\_BHV\_in & -- & -- & -- & 4.92 \\
+EFR\_CFPS\_in & -- & -- & -- & 5.08 \\
+EFR\_CSPS & -- & -- & 7.39 & -- \\
+EFR\_CSPS\_in & -- & -- & -- & 4.93 \\
+EFR\_TIPS & -- & -- & 7.34 & -- \\
+EFR\_TIPS\_in & -- & -- & -- & 5.01 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The profiling results reveal that \textbf{distance calculation dominates runtime}, consuming 99.2\%--99.6\% of total execution time across all experiments. The CFR/EFR update step, policy extraction, and sampling operations are all negligible by comparison, each taking less than 0.5\% of total time.
+
+This extreme imbalance has important implications: optimizing the core learning algorithms (CFR update, sampling strategies) would yield minimal performance gains, as these operations already complete in milliseconds. Instead, future optimization efforts should focus on the equilibrium distance computation itself, particularly for AFCCE which requires the longest computation time (9.6 seconds per 10 iterations).
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for AFCCE}
+\label{tab:afcce_breakdown}
+\begin{tabular}{lcc}
+\toprule
+Function & CFR & EFR\_ACT \\
+\midrule
+CFR Update & 0.01 & 0.01 \\
+Policy Extract & 0.01 & 0.01 \\
+Sampling & 0.05 & 0.05 \\
+Get Corr Dev & 0.24 & 0.24 \\
+Reset & 0.00 & 0.00 \\
+Distance Calc & 99.60 & 99.60 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for AFCE}
+\label{tab:afce_breakdown}
+\begin{tabular}{lcc}
+\toprule
+Function & CFR & EFR\_ACT\_in \\
+\midrule
+CFR Update & 0.01 & 0.02 \\
+Policy Extract & 0.02 & 0.02 \\
+Sampling & 0.08 & 0.08 \\
+Get Corr Dev & 0.37 & 0.37 \\
+Reset & 0.00 & 0.00 \\
+Distance Calc & 99.38 & 99.35 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for EFCCE}
+\label{tab:efcce_breakdown}
+\begin{tabular}{lcccc}
+\toprule
+Function & CFR & EFR\_BHV & EFR\_CSPS & EFR\_TIPS \\
+\midrule
+CFR Update & 0.01 & 0.01 & 0.01 & 0.01 \\
+Policy Extract & 0.02 & 0.02 & 0.02 & 0.02 \\
+Sampling & 0.06 & 0.07 & 0.06 & 0.07 \\
+Get Corr Dev & 0.31 & 0.31 & 0.31 & 0.31 \\
+Reset & 0.00 & 0.00 & 0.00 & 0.00 \\
+Distance Calc & 99.48 & 99.47 & 99.48 & 99.46 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for EFCE}
+\label{tab:efce_breakdown}
+\begin{tabular}{lcccccc}
+\toprule
+Function & CFR\_in & CFR & EFR\_BHV\_in & EFR\_CFPS\_in & EFR\_CSPS\_in & EFR\_TIPS\_in \\
+\midrule
+CFR Update & 0.02 & 0.01 & 0.02 & 0.02 & 0.02 & 0.02 \\
+Policy Extract & 0.03 & 0.02 & 0.03 & 0.03 & 0.03 & 0.03 \\
+Sampling & 0.10 & 0.10 & 0.10 & 0.10 & 0.10 & 0.10 \\
+Get Corr Dev & 0.47 & 0.46 & 0.47 & 0.45 & 0.46 & 0.46 \\
+Reset & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+Distance Calc & 99.22 & 99.25 & 99.23 & 99.24 & 99.21 & 99.24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The consistency of these percentages across algorithms confirms that the performance characteristics are dominated by the equilibrium distance function itself, not by algorithmic differences in CFR vs. EFR. The slightly higher overhead for ``Get Corr Dev'' in EFCE experiments (0.45\%--0.47\%) compared to AFCCE (0.24\%) reflects the larger correlation devices accumulated for internal-regret tracking experiments.
+
 
 
 

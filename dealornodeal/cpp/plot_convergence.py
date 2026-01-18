@@ -14,6 +14,27 @@ equilibrium_groups = {
     "Zero-Sum": ["zerosum_cfr_cce.txt", "zerosum_cfr_ce.txt"]
 }
 
+# consistent color mapping for algorithms across all plots
+# maps base algorithm name (before external/internal labels) to color
+# using bright, high-contrast colors for better differentiation
+algorithm_colors = {
+    "CFR": "#0066FF",           # bright blue
+    "CFR (CCE)": "#0066FF",     # bright blue (for zero-sum CCE)
+    "CFR (CE)": "#00CC00",      # bright green (for zero-sum CE)
+    "EFR_ACT": "#FF6600",       # bright orange
+    "EFR_BHV": "#FF0000",       # bright red
+    "EFR_CSPS": "#9933FF",      # bright purple
+    "EFR_TIPS": "#00CCCC",      # bright cyan/teal
+    "EFR_CFPS": "#FF00FF",      # bright magenta
+}
+
+# line styles for external vs internal sampling
+line_styles = {
+    "external": "-",      # solid line
+    "internal": "--",     # dashed line
+    "default": "-"        # solid line for CFR
+}
+
 def format_algorithm_name(algorithm_name):
     """
     format algorithm name to explicitly label external vs internal sampling.
@@ -71,6 +92,28 @@ def read_convergence_file(filepath):
 
     return algorithm_name, iterations, distances
 
+def get_algorithm_style(algorithm_name):
+    """
+    determine color and line style for an algorithm based on its name.
+
+    returns tuple of (color, linestyle)
+    """
+    # extract base algorithm name (before external/internal label)
+    base_name = algorithm_name.split(' (')[0]
+
+    # determine if external or internal
+    if '(internal)' in algorithm_name:
+        style = line_styles["internal"]
+    elif '(external)' in algorithm_name:
+        style = line_styles["external"]
+    else:
+        style = line_styles["default"]
+
+    # get color from mapping, default to black if not found
+    color = algorithm_colors.get(base_name, "#000000")
+
+    return color, style
+
 def plot_equilibrium_group(equilibrium_name, file_list, output_dir):
     """
     create a plot for a single equilibrium type with all its algorithms.
@@ -89,9 +132,13 @@ def plot_equilibrium_group(equilibrium_name, file_list, output_dir):
         # format the algorithm name to show external/internal explicitly
         formatted_name = format_algorithm_name(algorithm_name)
 
-        # plot this algorithm's convergence
+        # get consistent color and line style for this algorithm
+        color, linestyle = get_algorithm_style(formatted_name)
+
+        # plot this algorithm's convergence with consistent styling
         plt.plot(iterations, distances, marker='o', markersize=2,
-                 label=formatted_name, linewidth=1)
+                 label=formatted_name, linewidth=1.5,
+                 color=color, linestyle=linestyle)
 
     plt.yscale('log')
     plt.xlabel('Iterations', fontsize=12)
