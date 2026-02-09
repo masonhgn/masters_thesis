@@ -6,7 +6,8 @@
       "Bash(./open_spiel-private/build.Release/bin/ltbr/run_corr_dist:*)",
       "Bash(ls:*)",
       "Bash(tree:*)",
-      "Bash(du -sh:*)"
+      "Bash(du -sh:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "ask": []

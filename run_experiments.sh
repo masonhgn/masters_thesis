@@ -5,10 +5,17 @@
 
 # configuration
 EXECUTABLE="./open_spiel-private/build.Release/bin/ltbr/run_corr_dist"
+<<<<<<< Updated upstream
 ITERATIONS=10
 REPORT_INTERVAL=1
 NUM_SAMPLES=100  # increased from 5 for better accuracy
 SAMPLER="external"  # use external sampling for speed (null=slowest, external=fast, outcome=fastest)
+=======
+ITERATIONS=1000
+REPORT_INTERVAL=20
+NUM_SAMPLES=1000  # increased from 5 for better accuracy
+SAMPLER="outcome"  # use external sampling for speed (null=slowest, external=fast, outcome=fastest)
+>>>>>>> Stashed changes
 RANDOM_SEED=42  # seed for reproducibility
 RESULTS_DIR="./experiment_results"
 
