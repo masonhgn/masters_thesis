@@ -181,7 +181,7 @@ where $\pi_i^*$ is player $i$'s best response against $\pi_{-i}$ (the strategies
 
 \subsection{Policy Delta}
 
-\amy{TODO}
+% \amy{TODO}
 
 
 
@@ -274,6 +274,121 @@ The appropriate primary convergence metric depends on whether the game is zero-s
 
 In practice, we care about the general sum game as the zero sum version is just for testing the initial implementation.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\newpage
+
+\section{Experimental Setup}
+
+This section describes the specific game configuration, instance encoding, and experimental pipeline used for the equilibrium distance experiments that follow. All experiments use the \texttt{bargaining\_small} variant (``Original-Mini'' from Table 1), a reduced-scale version of the multi-issue bargaining game from Lewis et al.~(2017).
+
+\subsection{Game Parameters}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Item types & 2 \\
+Max items per type in pool & 4 \\
+Total value per player & 5 \\
+Max turns (offers) & 2 \\
+Discount factor & 1.0 (no discounting) \\
+Early termination probability & 0.0 \\
+Number of instances & 10 (hardcoded) \\
+\bottomrule
+\end{tabular}
+\caption{Parameters for the \texttt{bargaining\_small} game.}
+\end{table}
+
+\subsection{Instance Encoding}
+
+Each game instance defines the item pool and each player's private valuations, encoded as three comma-separated groups:
+
+\[
+\underbrace{p_0, p_1}_{\text{pool}} \quad \underbrace{v^0_0, v^0_1}_{\text{player 0 values}} \quad \underbrace{v^1_0, v^1_1}_{\text{player 1 values}}
+\]
+
+For example, the instance \texttt{1,1 3,2 5,0} specifies:
+\begin{itemize}
+    \item \textbf{Pool:} 1 of type A, 1 of type B (2 items total)
+    \item \textbf{Player 0 values:} type A worth 3, type B worth 2 (sum = 5)
+    \item \textbf{Player 1 values:} type A worth 5, type B worth 0 (sum = 5)
+\end{itemize}
+
+Valid instances satisfy three constraints: (1) each player's values sum to exactly 5, (2) each item type has nonzero value to at least one player, and (3) it is not possible for both players to receive maximum score. The game uses 10 hardcoded instances, selected uniformly at random by a chance node at the start of each game.
+
+\subsection{Game Flow}
+
+\begin{enumerate}
+    \item \textbf{Chance node:} Selects one of the 10 instances uniformly at random. Both players observe the pool and their own private values, but \emph{not} the opponent's values. This is the source of imperfect information.
+    \item \textbf{Offers:} Players alternate proposing how to split the pool. An offer is a vector $[q_0, q_1]$ specifying how many of each item type the proposer keeps; the responder receives the remainder $(p_i - q_i)$. Only offers where $q_i \leq p_i$ are legal.
+    \item \textbf{Agreement:} After at least one offer, the responding player may accept (``Agree'') instead of counter-offering.
+    \item \textbf{Termination:} The game ends upon agreement or after 2 offers with no agreement.
+    \item \textbf{Returns:} If agreement is reached, each player $k$ scores $\sum_i v^k_i \cdot x^k_i$ where $x^k_i$ is the number of items of type $i$ allocated to player $k$. If no agreement, both receive 0.
+\end{enumerate}
+
+\subsection{Action Space}
+
+All possible offers are pre-enumerated: every vector $[q_0, q_1]$ where $0 \leq q_i \leq 4$ and $q_0 + q_1 \leq 4$. This yields 15 distinct offers, plus 1 ``Agree'' action, for a total of 16 distinct actions. At runtime, offers exceeding the current instance's pool quantities are filtered out.
+
+\subsection{Information State Representation}
+
+The information state is encoded as a binary vector using \emph{thermometer encoding}, where a value $v$ out of maximum $m$ is represented as $(v+1)$ ones followed by $(m-v)$ zeros (e.g., pool quantity 3 with max 4 becomes $[1,1,1,1,0]$).
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lrl@{}}
+\toprule
+\textbf{Component} & \textbf{Size (bits)} & \textbf{Encoding} \\
+\midrule
+Agreement flag & 1 & Binary \\
+Offer count & 3 & One-hot (0, 1, or 2 offers) \\
+Pool quantities & $2 \times 5 = 10$ & Thermometer per item type \\
+Player's own values & $2 \times 6 = 12$ & Thermometer per item type \\
+All offers (per turn slot) & $2 \times 2 \times 5 = 20$ & Thermometer per type per slot \\
+\bottomrule
+\end{tabular}
+\caption{Information state tensor layout.}
+\end{table}
+
+Each player observes the pool, their own values, and the full offer history, but never the opponent's values.
+
+\subsection{Experiment Pipeline (\texttt{run\_corr\_dist})}
+
+Each experiment executes the following pipeline for a given algorithm--equilibrium pair:
+
+\begin{enumerate}
+    \item \textbf{Initialization:} Load the game, build the game tree, instantiate the learning algorithm (CFR or a specific EFR variant with its corresponding deviation set), and seed the correlation device with deterministic policies sampled from the initial uniform strategy.
+
+    \item \textbf{Iteration loop} (for $t = 1, \ldots, T$):
+    \begin{enumerate}
+        \item \textbf{CFR/EFR update:} Freeze the current average strategy, traverse the game tree using external sampling, and update regret accumulators according to the algorithm's deviation set.
+        \item \textbf{Policy extraction:} Convert the updated average strategy into a tabular policy mapping each information state to a distribution over actions.
+        \item \textbf{Correlation device sampling} (periodic): Sample deterministic joint policies from the current behavioral strategy and add them to the correlation device. This avoids the exponential cost of enumerating all deterministic strategy combinations.
+        \item \textbf{Memory management} (periodic): If the correlation device exceeds a size threshold, discard the oldest policies and retain only the most recent (sliding window).
+    \end{enumerate}
+
+    \item \textbf{Reporting} (periodic): Construct the correlation device $\mu = \{(w_i, \pi_i)\}$ from accumulated policies, compute the equilibrium distance for the specified type, and write the result.
+\end{enumerate}
+
+The correlation device $\mu$ is a weighted distribution over deterministic joint policies. As the learning algorithm converges, this distribution should approximate a correlated equilibrium of the specified type, and the distance measure---quantifying the maximum incentive any player has to deviate from the recommended strategy---should approach zero.
+
 \newpage
 
 \section{Equilibrium Distance Analysis}
@@ -329,33 +444,33 @@ Figure 6 presents the convergence curves for each equilibrium concept, showing h
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{convergence_plots/afcce_convergence.png}
+  \includegraphics[width=\linewidth]{plots/eq_plots/afcce_convergence.png}
   \caption{AFCCE convergence}
 \end{subfigure}
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{convergence_plots/afce_convergence.png}
+  \includegraphics[width=\linewidth]{plots/eq_plots/afce_convergence.png}
   \caption{AFCE convergence}
 \end{subfigure}
 
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{convergence_plots/efcce_convergence.png}
+  \includegraphics[width=\linewidth]{plots/eq_plots/efcce_convergence.png}
   \caption{EFCCE convergence}
 \end{subfigure}
 \begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{convergence_plots/efce_convergence.png}
+  \includegraphics[width=\linewidth]{plots/eq_plots/efce_convergence.png}
   \caption{EFCE convergence}
 \end{subfigure}
 
-\begin{subfigure}{0.48\textwidth}
-  \includegraphics[width=\linewidth]{convergence_plots/zero_sum_convergence.png}
-  \caption{Zero-sum CE and CCE convergence}
-\end{subfigure}
+% \begin{subfigure}{0.48\textwidth}
+%   \includegraphics[width=\linewidth]{plots/eq_plots/zero_sum_convergence.png}
+%   \caption{Zero-sum CE and CCE convergence}
+% \end{subfigure}
 \caption*{Figure 6: Convergence to different equilibrium concepts across algorithms. The y-axis uses logarithmic scale to better visualize differences in convergence rates.}
 \end{figure}
 
 \subsection{Analysis}
 
-The experimental results largely confirm the theoretical predictions, with some notable observations:
+The experimental results mostly confirm the theoretical predictions, with some notable observations:
 
 \textbf{Confirmed hypotheses:}
 \begin{itemize}
@@ -370,14 +485,127 @@ The experimental results largely confirm the theoretical predictions, with some 
 
 \textbf{Interesting observations:}
 \begin{itemize}
-    \item The EFCCE results show that all EFR variants outperform CFR, which aligns with theoretical expectations. However, the ordering among EFR variants differs from the hypothesis. EFR(CSPS) achieves the best performance, followed by EFR(BHV), then EFR(TIPS). This suggests that for this particular game structure, the CSPS deviation set provides the most appropriate granularity for minimizing EFCCE distance.
+    \item The EFCCE results show that all EFR variants outperform CFR, which aligns with theoretical expectations. However, the ordering among EFR variants differs from the hypothesis. EFR(CSPS) achieves the best performance, followed by EFR(BHV), then EFR(TIPS). This could mean that for this particular game structure, the CSPS deviation set provides the most appropriate granularity for minimizing EFCCE distance.
 
-    \item The computational cost of EFR(BHV) mentioned in the hypothesis is reflected in practice, but the expected performance advantage does not materialize for EFCCE in this game. This highlights the importance of matching the deviation set to the specific equilibrium concept and game structure.
+    \item The performance advantage of EFR(BHV) was not apparent for EFCCE in this game. This highlights the importance of matching the deviation set to the specific equilibrium concept and game structure.
 
-    \item All algorithms demonstrate smooth convergence on logarithmic scale, with exponential decay in equilibrium distance over iterations, which is characteristic of regret minimization algorithms approaching equilibrium.
+    \item All algorithms show smooth convergence on logarithmic scale, with exponential decay in equilibrium distance over iterations, which is characteristic of regret minimization algorithms approaching equilibrium.
 \end{itemize}
 
-These results demonstrate that the choice of algorithm should be guided by the target equilibrium concept. While EFR variants generally outperform CFR on correlation-based equilibrium refinements, the specific EFR deviation set must be carefully matched to the equilibrium concept of interest.
+what do we think of these results (?)
+
+\subsection{Computational Profiling}
+
+To understand the computational bottlenecks in equilibrium distance computation, we profiled the runtime of each experiment. Table \ref{tab:total_time} shows the total wall-clock time for 10 iterations of each algorithm-equilibrium combination, while Tables \ref{tab:afcce_breakdown}--\ref{tab:efce_breakdown} break down the percentage of time spent in each major function.
+
+\begin{table}[H]
+\centering
+\caption{Total experiment time (seconds) for 10 iterations}
+\label{tab:total_time}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm & AFCCE & AFCE & EFCCE & EFCE \\
+\midrule
+CFR & 9.64 & 6.22 & 7.48 & 4.96 \\
+CFR\_in & -- & -- & -- & 5.01 \\
+EFR\_ACT & 9.63 & -- & -- & -- \\
+EFR\_ACT\_in & -- & 6.16 & -- & -- \\
+EFR\_BHV & -- & -- & 7.32 & -- \\
+EFR\_BHV\_in & -- & -- & -- & 4.92 \\
+EFR\_CFPS\_in & -- & -- & -- & 5.08 \\
+EFR\_CSPS & -- & -- & 7.39 & -- \\
+EFR\_CSPS\_in & -- & -- & -- & 4.93 \\
+EFR\_TIPS & -- & -- & 7.34 & -- \\
+EFR\_TIPS\_in & -- & -- & -- & 5.01 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The profiling results reveal that \textbf{distance calculation dominates runtime}, consuming 99.2\%--99.6\% of total execution time across all experiments. The CFR/EFR update step, policy extraction, and sampling operations are all negligible by comparison, each taking less than 0.5\% of total time.
+
+This extreme imbalance has important implications: optimizing the core learning algorithms (CFR update, sampling strategies) would yield minimal performance gains, as these operations already complete in milliseconds. Instead, future optimization efforts should focus on the equilibrium distance computation itself, particularly for AFCCE which requires the longest computation time (9.6 seconds per 10 iterations).
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for AFCCE}
+\label{tab:afcce_breakdown}
+\begin{tabular}{lcc}
+\toprule
+Function & CFR & EFR\_ACT \\
+\midrule
+CFR Update & 0.01 & 0.01 \\
+Policy Extract & 0.01 & 0.01 \\
+Sampling & 0.05 & 0.05 \\
+Get Corr Dev & 0.24 & 0.24 \\
+Reset & 0.00 & 0.00 \\
+Distance Calc & 99.60 & 99.60 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for AFCE}
+\label{tab:afce_breakdown}
+\begin{tabular}{lcc}
+\toprule
+Function & CFR & EFR\_ACT\_in \\
+\midrule
+CFR Update & 0.01 & 0.02 \\
+Policy Extract & 0.02 & 0.02 \\
+Sampling & 0.08 & 0.08 \\
+Get Corr Dev & 0.37 & 0.37 \\
+Reset & 0.00 & 0.00 \\
+Distance Calc & 99.38 & 99.35 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for EFCCE}
+\label{tab:efcce_breakdown}
+\begin{tabular}{lcccc}
+\toprule
+Function & CFR & EFR\_BHV & EFR\_CSPS & EFR\_TIPS \\
+\midrule
+CFR Update & 0.01 & 0.01 & 0.01 & 0.01 \\
+Policy Extract & 0.02 & 0.02 & 0.02 & 0.02 \\
+Sampling & 0.06 & 0.07 & 0.06 & 0.07 \\
+Get Corr Dev & 0.31 & 0.31 & 0.31 & 0.31 \\
+Reset & 0.00 & 0.00 & 0.00 & 0.00 \\
+Distance Calc & 99.48 & 99.47 & 99.48 & 99.46 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Time breakdown (\%) for EFCE}
+\label{tab:efce_breakdown}
+\begin{tabular}{lcccccc}
+\toprule
+Function & CFR\_in & CFR & EFR\_BHV\_in & EFR\_CFPS\_in & EFR\_CSPS\_in & EFR\_TIPS\_in \\
+\midrule
+CFR Update & 0.02 & 0.01 & 0.02 & 0.02 & 0.02 & 0.02 \\
+Policy Extract & 0.03 & 0.02 & 0.03 & 0.03 & 0.03 & 0.03 \\
+Sampling & 0.10 & 0.10 & 0.10 & 0.10 & 0.10 & 0.10 \\
+Get Corr Dev & 0.47 & 0.46 & 0.47 & 0.45 & 0.46 & 0.46 \\
+Reset & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+Distance Calc & 99.22 & 99.25 & 99.23 & 99.24 & 99.21 & 99.24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The consistency of these percentages across algorithms confirms that the performance characteristics are dominated by the equilibrium distance function itself, not by algorithmic differences in CFR vs. EFR. The slightly higher overhead for ``Get Corr Dev'' in EFCE experiments (0.45\%--0.47\%) compared to AFCCE (0.24\%) reflects the larger correlation devices accumulated for internal-regret tracking experiments.
+
+
+
+
+
+
+
+
 
 
 
