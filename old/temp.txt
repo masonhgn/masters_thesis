@@ -1,0 +1,12 @@
+So I've been trying to run experiments testing the EFCE and EFCCE performance 
+ of this bargaining_small game. My results are in experiments/ and you can see  
+all the scripts that have been made, but the issue is: my professor insists     
+that EFR tips should win, and EFR csps should follow closely, and CFR should be 
+ the worst. I am not seeming to get those results though no matter what I try.  
+If I try running a game that is too large, it will literally not run on my      
+computer. so I need to balance game tree size to reduce variance with system    
+limits. so use /ultrathink and dive deep into the run_corr_dist code and all of 
+ the functions it uses. Look deeply into my game architecture                   
+ to ensure that everything is set up correctly. Take a multi-phase approach     
+that involves deeply analyzing things. /plan your approach                      
+ for investigation 

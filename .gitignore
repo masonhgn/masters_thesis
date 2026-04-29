@@ -1,3 +1,28 @@
+# thesis-repo specific
+
+# upstream open_spiel checkout - not tracked here; clone separately if needed
+/open_spiel/
+
+# build artifacts inside open_spiel-private (the submodule's own .gitignore
+# also covers these, but list here defensively for any clone state)
+open_spiel-private/build/
+open_spiel-private/build.Release/
+open_spiel-private/.cache/
+open_spiel-private/compile_commands.json
+open_spiel-private/.tmp/
+open_spiel-private/testtest/
+
+# generic build dirs anywhere in the repo
+build*/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# editor / IDE state
+.vscode/
+.idea/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

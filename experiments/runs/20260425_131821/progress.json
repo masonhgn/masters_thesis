@@ -1,0 +1,43 @@
+{
+  "completed": [
+    "afcce_cfr_t2_seed0",
+    "afcce_efr_act_t2_seed0",
+    "afce_cfr_in_t2_seed0",
+    "afce_efr_act_in_t2_seed0",
+    "efcce_cfr_t2_seed0",
+    "efcce_efr_csps_t2_seed0",
+    "efcce_efr_tips_t2_seed0",
+    "efcce_efr_bhv_t2_seed0",
+    "efce_cfr_in_t2_seed0",
+    "efce_efr_cfps_in_t2_seed0",
+    "efce_efr_tips_in_t2_seed0",
+    "efce_efr_bhv_in_t2_seed0",
+    "cce_cfr_t2_seed0",
+    "cce_cfr_in_t2_seed0",
+    "ce_cfr_t2_seed0",
+    "ce_cfr_in_t2_seed0",
+    "afcce_cfr_t3_seed0",
+    "afcce_efr_act_t3_seed0",
+    "afce_cfr_in_t3_seed0",
+    "afce_efr_act_in_t3_seed0",
+    "efcce_cfr_t3_seed0",
+    "efcce_efr_csps_t3_seed0",
+    "efcce_efr_tips_t3_seed0",
+    "efcce_efr_bhv_t3_seed0",
+    "efce_cfr_in_t3_seed0",
+    "efce_efr_cfps_in_t3_seed0",
+    "efce_efr_tips_in_t3_seed0",
+    "efce_efr_bhv_in_t3_seed0",
+    "cce_cfr_t3_seed0",
+    "cce_cfr_in_t3_seed0",
+    "ce_cfr_t3_seed0",
+    "ce_cfr_in_t3_seed0",
+    "afcce_cfr_t4_seed0",
+    "afcce_efr_act_t4_seed0",
+    "afce_cfr_in_t4_seed0",
+    "afce_efr_act_in_t4_seed0"
+  ],
+  "failed": [
+    "efcce_cfr_t4_seed0"
+  ]
+}

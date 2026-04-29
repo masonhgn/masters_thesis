@@ -1,0 +1,37 @@
+
+
+1. looked at my monte carlo code and tried to figure out how to improve it, digging into what
+random seeding I use and told me to just spend more time trying to debug it for correctness, ask claude etc.
+he said he uses claude for about 90% of his code writing
+
+2. he said that given the oscillation in my monte carlo, it's worth getting an exact distance result
+regardless of how long it takes, perhaps 4 turns, 6 instances is a careful balance.
+
+3. an efr agent would be a great idea for scml. all we need to do is take the efr algorithm in open spiel 
+and pass the scml one shot game as an EFG file, which imports the game, and then train to create a policy file.
+
+from there, it's about making other small optimizations and tweaks that don't always pertain to efr, could be rule based things
+that have to do with the mechanics of one shot scml.
+
+
+4. Going back to exact distance, Taking one sample, 25 iterations, 100 iterations, I have gotten this sawtooth pattern.
+
+
+
+
+
+AMY NOTES:
+
+send an email with my plan for efr scml
+
+
+
+
+NEW NOTES FOR 4/23:
+
+- talk about mcefr (I made that shit!)
+- talk about deal or no deal python implementation (I made that too)
+- talk about results of EFR, gracefully including that there were limitations in computational power
+- run experiments THAT ARE QUICK and still squeeze good results out of that which I can talk about
+- reference efficient deviation types paper a lot 
+- WE CAN GET A GOOD 25-30 PAGES FROM THIS

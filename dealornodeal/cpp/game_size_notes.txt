@@ -1,0 +1,53 @@
+Why the current game size is too small for meaningful algorithm comparison
+========================================================================
+
+1. Shallow game tree collapses algorithm differences
+-----------------------------------------------------
+With only 2 rounds (P1 offers, P2 counters, P1 accepts/rejects), the
+reach-probability vectors at each decision point never grow beyond 1-2
+elements. This causes several distinct algorithms to produce identical
+results:
+
+- CausalSuccessors vs CounterfactualSuccessors: Causal grows the
+  reach-prob vector by appending entries for each action. Counterfactual
+  keeps it at constant {1.0}. In a 2-round game, the causal vector is
+  so short that the two behave identically.
+
+- CSPS's external/internal split: CSPS partitions the reach-prob vector
+  into "all but last" (external) and "last element" (internal). With a
+  size-1 vector at the root, "all but last" is empty — no external
+  component at all. This makes CSPS collapse to pure-internal, identical
+  to TIPS_in and CFR_in.
+
+Result: CFR_in, EFR_TIPS_in, and EFR_CSPS all produce the exact same
+output on EFCE. On EFCCE, CFR and EFR_TIPS_ex are identical. Only
+EFR_CSPS on EFCCE shows any differentiation.
+
+A deeper game (more rounds of offers) would let the reach-prob vectors
+grow, making the causal/counterfactual and external/internal distinctions
+meaningful.
+
+2. Single instance eliminates imperfect information
+----------------------------------------------------
+With only 1 instance, both players know the opponent's values with
+certainty. The game becomes effectively perfect-information, and all
+correlated equilibrium concepts collapse:
+
+  EFCE = EFCCE = CE = CCE = Nash
+
+There is no uncertainty for a mediator to exploit, so the correlation
+device is trivial. CFR and EFR converge to the same thing because
+there are no information sets where a player must reason about hidden
+opponent types.
+
+Multiple instances create genuine imperfect information: each player
+knows their own values but faces uncertainty about the opponent's type.
+This is exactly the setting where EFCE and EFCCE differ (EFCE allows
+deviations after seeing the recommendation, EFCCE only before), and
+where EFR's richer deviation sets should outperform CFR.
+
+Summary
+-------
+To see meaningful differences between algorithms, the game needs:
+- Enough rounds for reach-prob vectors to grow (3+ rounds of offers)
+- Multiple instances for genuine imperfect information (6+ instances)

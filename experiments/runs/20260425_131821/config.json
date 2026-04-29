@@ -1,0 +1,98 @@
+{
+  "game_template": "bargaining_small(max_turns={turns})",
+  "max_turns_list": [
+    2,
+    3,
+    4
+  ],
+  "iterations": 1000,
+  "report_interval": 50,
+  "num_samples": 10,
+  "sampler": "outcome",
+  "seeds": [
+    0
+  ],
+  "run_timeout_seconds": 7200,
+  "experiments": [
+    {
+      "name": "afcce_cfr",
+      "algo": "CFR",
+      "equilibrium": "AFCCE"
+    },
+    {
+      "name": "afcce_efr_act",
+      "algo": "EFR_ACT",
+      "equilibrium": "AFCCE"
+    },
+    {
+      "name": "afce_cfr_in",
+      "algo": "CFR_in",
+      "equilibrium": "AFCE"
+    },
+    {
+      "name": "afce_efr_act_in",
+      "algo": "EFR_ACT_in",
+      "equilibrium": "AFCE"
+    },
+    {
+      "name": "efcce_cfr",
+      "algo": "CFR",
+      "equilibrium": "EFCCE"
+    },
+    {
+      "name": "efcce_efr_csps",
+      "algo": "EFR_CSPS",
+      "equilibrium": "EFCCE"
+    },
+    {
+      "name": "efcce_efr_tips",
+      "algo": "EFR_TIPS",
+      "equilibrium": "EFCCE"
+    },
+    {
+      "name": "efcce_efr_bhv",
+      "algo": "EFR_BHV",
+      "equilibrium": "EFCCE"
+    },
+    {
+      "name": "efce_cfr_in",
+      "algo": "CFR_in",
+      "equilibrium": "EFCE"
+    },
+    {
+      "name": "efce_efr_cfps_in",
+      "algo": "EFR_CFPS_in",
+      "equilibrium": "EFCE"
+    },
+    {
+      "name": "efce_efr_tips_in",
+      "algo": "EFR_TIPS_in",
+      "equilibrium": "EFCE"
+    },
+    {
+      "name": "efce_efr_bhv_in",
+      "algo": "EFR_BHV_in",
+      "equilibrium": "EFCE"
+    },
+    {
+      "name": "cce_cfr",
+      "algo": "CFR",
+      "equilibrium": "CCE"
+    },
+    {
+      "name": "cce_cfr_in",
+      "algo": "CFR_in",
+      "equilibrium": "CCE"
+    },
+    {
+      "name": "ce_cfr",
+      "algo": "CFR",
+      "equilibrium": "CE"
+    },
+    {
+      "name": "ce_cfr_in",
+      "algo": "CFR_in",
+      "equilibrium": "CE"
+    }
+  ]
+}

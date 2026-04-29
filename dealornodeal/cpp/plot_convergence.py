@@ -1,64 +1,55 @@
 import matplotlib.pyplot as plt
-import os
+import numpy as np
 from pathlib import Path
+from scipy import stats
 
 # directory containing the text files
 results_dir = Path("experiment_results")
 
 # groupings by equilibrium type
+# each entry is the base filename (without _seedN.txt)
 equilibrium_groups = {
-    "AFCCE": ["afcce_cfr.txt", "afcce_efr_act.txt"],
-    "AFCE": ["afce_cfr.txt", "afce_efr_act_in.txt"],
-    "EFCCE": ["efcce_cfr.txt", "efcce_efr_bhv.txt", "efcce_efr_csps.txt", "efcce_efr_tips.txt"],
-    "EFCE": ["efce_cfr.txt", "efce_cfr_in.txt", "efce_efr_cfps_in.txt", "efce_efr_tips_in.txt", "efce_efr_csps_in.txt", "efce_efr_bhv_in.txt"],
-    "Zero-Sum": ["zerosum_cfr_cce.txt", "zerosum_cfr_ce.txt"]
+    "EFCCE": ["efcce_cfr", "efcce_efr_csps", "efcce_efr_tips"],
+    "EFCE": ["efce_cfr", "efce_cfr_in", "efce_efr_tips_in", "efce_efr_csps"],
 }
 
-# consistent color mapping for algorithms across all plots
-# maps base algorithm name (before external/internal labels) to color
-# using bright, high-contrast colors for better differentiation
+# distinct color for every algorithm variant that appears in experiments
 algorithm_colors = {
-    "CFR": "#0066FF",           # bright blue
-    "CFR (CCE)": "#0066FF",     # bright blue (for zero-sum CCE)
-    "CFR (CE)": "#00CC00",      # bright green (for zero-sum CE)
-    "EFR_ACT": "#FF6600",       # bright orange
-    "EFR_BHV": "#FF0000",       # bright red
-    "EFR_CSPS": "#9933FF",      # bright purple
-    "EFR_TIPS": "#00CCCC",      # bright cyan/teal
-    "EFR_CFPS": "#FF00FF",      # bright magenta
+    "CFR": "#000000",                # black
+    "CFR (internal)": "#666666",     # gray
+    "EFR_ACT": "#FF6600",            # bright orange
+    "EFR_ACT (internal)": "#CC4400", # dark orange
+    "EFR_BHV": "#FF0000",            # bright red
+    "EFR_BHV (internal)": "#AA0000", # dark red
+    "EFR_CSPS": "#9933FF",           # bright purple
+    "EFR_TIPS (external)": "#00CCCC",# bright cyan/teal
+    "EFR_TIPS (internal)": "#007777",# dark teal
+    "EFR_TIPS": "#00CCCC",           # bright cyan/teal
+    "EFR_CFPS": "#FF00FF",           # bright magenta
+    "EFR_CFPS (internal)": "#AA00AA",# dark magenta
 }
 
-# line styles for external vs internal sampling
-line_styles = {
-    "external": "-",      # solid line
-    "internal": "--",     # dashed line
-    "default": "-"        # solid line for CFR
-}
 
 def format_algorithm_name(algorithm_name):
     """
     format algorithm name to explicitly label external vs internal sampling.
 
-    if the algorithm name doesn't contain '_in', add '(external)' suffix.
-    if it contains '_in', replace '_in' with '(internal)'.
+    handles _in (internal) and _ex (external) suffixes in algorithm names.
     """
-    # check if this is an internal sampling algorithm
-    if '_in' in algorithm_name:
-        # replace _in with (internal)
+    if '_in ' in algorithm_name or algorithm_name.endswith('_in'):
         return algorithm_name.replace('_in', ' (internal)')
+    elif '_ex ' in algorithm_name or algorithm_name.endswith('_ex'):
+        return algorithm_name.replace('_ex', ' (external)')
     else:
-        # for external sampling, add (external) label
-        # but skip CFR since it's the baseline
         if algorithm_name.startswith('CFR '):
             return algorithm_name
         else:
-            # split on first space to insert (external) after algorithm name
             parts = algorithm_name.split(' ', 1)
             if len(parts) == 2:
-                return f"{parts[0]} (external) {parts[1]}"
+                return f"{parts[0]} {parts[1]}"
             else:
-                return f"{algorithm_name} (external)"
-    return algorithm_name
+                return algorithm_name
+
 
 def read_convergence_file(filepath):
     """
@@ -72,7 +63,6 @@ def read_convergence_file(filepath):
     # first line is the algorithm name
     algorithm_name = lines[0].strip()
 
-    # parse data lines
     iterations = []
     distances = []
 
@@ -87,58 +77,104 @@ def read_convergence_file(filepath):
                 iterations.append(int(parts[0]))
                 distances.append(float(parts[1]))
             except ValueError:
-                # skip lines that don't parse correctly
                 continue
 
     return algorithm_name, iterations, distances
+
+
+def find_seed_files(base_name):
+    """
+    find all seed files for a given base experiment name.
+
+    looks for files matching {base_name}_seed{N}.txt, falls back to
+    {base_name}.txt if no seed files exist (backwards compatibility).
+    """
+    seed_files = sorted(results_dir.glob(f"{base_name}_seed*.txt"))
+    if seed_files:
+        return seed_files
+    # fall back to single file
+    single = results_dir / f"{base_name}.txt"
+    if single.exists():
+        return [single]
+    return []
+
 
 def get_algorithm_style(algorithm_name):
     """
     determine color and line style for an algorithm based on its name.
 
-    returns tuple of (color, linestyle)
+    looks up the formatted name (e.g. "CFR (internal)") directly in the
+    color map. strips the equilibrium suffix first.
     """
-    # extract base algorithm name (before external/internal label)
-    base_name = algorithm_name.split(' (')[0]
+    # remove equilibrium suffix like " EFCE" or " EFCCE"
+    name = algorithm_name
+    for suffix in [" EFCE", " EFCCE", " AFCE", " AFCCE", " CCE", " CE"]:
+        name = name.replace(suffix, "")
+    name = name.strip()
 
-    # determine if external or internal
-    if '(internal)' in algorithm_name:
-        style = line_styles["internal"]
-    elif '(external)' in algorithm_name:
-        style = line_styles["external"]
+    if "(internal)" in name:
+        style = "--"
+    elif "(external)" in name:
+        style = "-."
     else:
-        style = line_styles["default"]
+        style = "-"
 
-    # get color from mapping, default to black if not found
-    color = algorithm_colors.get(base_name, "#000000")
+    color = algorithm_colors.get(name, "#000000")
 
     return color, style
 
-def plot_equilibrium_group(equilibrium_name, file_list, output_dir):
+
+def plot_equilibrium_group(equilibrium_name, base_names, output_dir):
     """
-    create a plot for a single equilibrium type with all its algorithms.
+    create a plot for a single equilibrium type with confidence intervals.
     """
     plt.figure(figsize=(10, 8))
 
-    for filename in file_list:
-        filepath = results_dir / filename
+    for base_name in base_names:
+        seed_files = find_seed_files(base_name)
 
-        if not filepath.exists():
-            print(f"warning: {filepath} not found, skipping")
+        if not seed_files:
+            print(f"  warning: no files found for {base_name}, skipping")
             continue
 
-        algorithm_name, iterations, distances = read_convergence_file(filepath)
+        # read all seeds
+        all_distances = []
+        algo_name = None
+        common_iterations = None
 
-        # format the algorithm name to show external/internal explicitly
-        formatted_name = format_algorithm_name(algorithm_name)
+        for filepath in seed_files:
+            name, iterations, distances = read_convergence_file(filepath)
+            if algo_name is None:
+                algo_name = name
+                common_iterations = np.array(iterations)
+            all_distances.append(distances)
 
-        # get consistent color and line style for this algorithm
+        if not all_distances:
+            continue
+
+        # align to shortest run
+        min_len = min(len(d) for d in all_distances)
+        all_distances = np.array([d[:min_len] for d in all_distances])
+        iterations = common_iterations[:min_len]
+
+        mean = np.mean(all_distances, axis=0)
+        formatted_name = format_algorithm_name(algo_name)
         color, linestyle = get_algorithm_style(formatted_name)
 
-        # plot this algorithm's convergence with consistent styling
-        plt.plot(iterations, distances, marker='o', markersize=2,
-                 label=formatted_name, linewidth=1.5,
-                 color=color, linestyle=linestyle)
+        num_seeds = len(seed_files)
+        if num_seeds > 1:
+            std = np.std(all_distances, axis=0, ddof=1)
+            # 95% confidence interval using t-distribution
+            t_crit = stats.t.ppf(0.975, df=num_seeds - 1)
+            ci = t_crit * std / np.sqrt(num_seeds)
+
+            plt.plot(iterations, mean, label=formatted_name,
+                     linewidth=1.5, color=color, linestyle=linestyle)
+            plt.fill_between(iterations, mean - ci, mean + ci,
+                             alpha=0.2, color=color)
+        else:
+            plt.plot(iterations, mean, label=formatted_name,
+                     linewidth=1.5, color=color, linestyle=linestyle)
 
     plt.yscale('log')
     plt.xlabel('Iterations', fontsize=12)
@@ -148,22 +184,20 @@ def plot_equilibrium_group(equilibrium_name, file_list, output_dir):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    # save the plot
     output_path = output_dir / f"{equilibrium_name.lower().replace('-', '_')}_convergence.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"saved: {output_path}")
+    print(f"  saved: {output_path}")
 
     plt.close()
 
+
 def main():
-    # create output directory for plots
     output_dir = Path("convergence_plots")
     output_dir.mkdir(exist_ok=True)
 
-    # create a plot for each equilibrium group
-    for equilibrium_name, file_list in equilibrium_groups.items():
+    for equilibrium_name, base_names in equilibrium_groups.items():
         print(f"\nprocessing {equilibrium_name}...")
-        plot_equilibrium_group(equilibrium_name, file_list, output_dir)
+        plot_equilibrium_group(equilibrium_name, base_names, output_dir)
 
     print(f"\nall plots saved to {output_dir}/")
 
